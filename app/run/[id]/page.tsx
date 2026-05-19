@@ -1,5 +1,4 @@
-import { TeleprompterView } from '@/components/TeleprompterView';
-import { ControlBar } from '@/components/ControlBar';
+import { RunController } from '@/components/RunController';
 
 export default async function RunPage({
   params,
@@ -7,13 +6,8 @@ export default async function RunPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-
-  return (
-    <div className="min-h-screen bg-black text-zinc-100">
-      <TeleprompterView scriptId={id} />
-      <ControlBar />
-      {/* Spacer so the last lines aren't hidden behind the fixed control bar */}
-      <div className="h-32" />
-    </div>
-  );
+  // RunController is the client boundary — it owns voice + mic permission +
+  // teleprompter view + control bar lifecycle. This page stays a server
+  // component so route param resolution happens before hydration.
+  return <RunController scriptId={id} />;
 }

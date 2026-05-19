@@ -21,6 +21,13 @@ type ScriptStoreState = {
   cursor: number;
   highlightedIndices: Set<number>;
   isRunning: boolean;
+  /**
+   * v0.2: true when the Web Speech engine is actively listening. Written by
+   * the `useVoiceMode` hook (run page) and read by ControlBar for the status
+   * indicator. Distinct from `isRunning` — a denied/unsupported mic still has
+   * isRunning=true (manual mode) but isListening stays false.
+   */
+  isListening: boolean;
 
   // Library actions
   hydrate: () => void;
@@ -43,6 +50,7 @@ type ScriptStoreState = {
   restart: () => void;
   advanceCursor: (n?: number) => void;
   markHighlighted: (index: number) => void;
+  setIsListening: (value: boolean) => void;
 };
 
 /**
@@ -68,6 +76,7 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
   cursor: 0,
   highlightedIndices: new Set<number>(),
   isRunning: false,
+  isListening: false,
 
   hydrate: () => {
     if (get().hydrated) return;
@@ -119,16 +128,18 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
       cursor: 0,
       highlightedIndices: new Set<number>(),
       isRunning: false,
+      isListening: false,
     });
   },
 
   start: () => set({ isRunning: true }),
-  pause: () => set({ isRunning: false }),
+  pause: () => set({ isRunning: false, isListening: false }),
   restart: () =>
     set({
       cursor: 0,
       highlightedIndices: new Set<number>(),
       isRunning: false,
+      isListening: false,
     }),
 
   advanceCursor: (n = 1) =>
@@ -145,4 +156,6 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
       newSet.add(index);
       return { highlightedIndices: newSet };
     }),
+
+  setIsListening: (value) => set({ isListening: value }),
 }));

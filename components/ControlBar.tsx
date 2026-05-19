@@ -4,8 +4,39 @@ import Link from 'next/link';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
 import { useSettingsStore } from '@/lib/stores/useSettingsStore';
 
-export function ControlBar() {
+type Props = {
+  /**
+   * v0.2: when false, the Start button gracefully degrades — it still works
+   * (manual mode) but no Listening indicator appears. Run page passes this
+   * derived from Web Speech API support detection.
+   */
+  voiceEnabled?: boolean;
+  /**
+   * v0.2 inline edit: current mode of the run page. View = teleprompter
+   * renders + voice eligible. Edit = InlineScriptEditor mounted, voice
+   * paused. ControlBar swaps Start/Edit for Done in edit mode.
+   */
+  mode?: 'view' | 'edit';
+  /** Fired when the user clicks the Edit pencil. RunController flips mode. */
+  onEnterEdit?: () => void;
+  /** Fired when the user clicks Done. RunController flips mode + restores mirror. */
+  onExitEdit?: () => void;
+  /**
+   * False if the script is empty (no content to read). Start button is
+   * disabled in that case to avoid arming voice over nothing.
+   */
+  canStartVoice?: boolean;
+};
+
+export function ControlBar({
+  voiceEnabled = true,
+  mode = 'view',
+  onEnterEdit,
+  onExitEdit,
+  canStartVoice = true,
+}: Props = {}) {
   const isRunning = useScriptStore((s) => s.isRunning);
+  const isListening = useScriptStore((s) => s.isListening);
   const start = useScriptStore((s) => s.start);
   const pause = useScriptStore((s) => s.pause);
   const restart = useScriptStore((s) => s.restart);
@@ -19,6 +50,8 @@ export function ControlBar() {
   const toggleMirror = useSettingsStore((s) => s.toggleMirror);
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+
+  const isEditing = mode === 'edit';
 
   return (
     <div
@@ -36,15 +69,31 @@ export function ControlBar() {
 
         <div className="h-5 w-px bg-zinc-800" />
 
-        {!isRunning ? (
+        {isEditing ? (
+          /* Edit mode: Done is the primary action. Replaces Start/Pause. */
+          <button
+            type="button"
+            onClick={onExitEdit}
+            title="Finish editing and return to teleprompter view (Esc)"
+            className="rounded-md bg-amber-400 px-3 py-1.5 font-medium text-black transition hover:bg-amber-300"
+          >
+            ✓ Done
+          </button>
+        ) : !isRunning ? (
           <button
             type="button"
             onClick={start}
-            disabled
-            title="Voice playback arrives in v0.2"
-            className="cursor-not-allowed rounded-md bg-zinc-800 px-3 py-1.5 text-zinc-500"
+            disabled={!canStartVoice}
+            title={
+              !canStartVoice
+                ? 'Add some script text first'
+                : voiceEnabled
+                  ? 'Start voice-driven highlighting'
+                  : 'Start in manual mode (voice unsupported)'
+            }
+            className="rounded-md bg-amber-400 px-3 py-1.5 font-medium text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            ▶ Start (v0.2)
+            ▶ Start
           </button>
         ) : (
           <button
@@ -56,22 +105,61 @@ export function ControlBar() {
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={() => advanceCursor(1)}
-          className="rounded-md border border-zinc-800 px-3 py-1.5 transition hover:bg-zinc-800"
-          title="Advance cursor by one token (manual, for v0.1 demo)"
-        >
-          → +1
-        </button>
+        {/* v0.2: Edit (pencil) — view-mode only. Discreet outline, matches
+            the luxury minimal tone (no heavy CTA). Clicking enters edit mode. */}
+        {!isEditing ? (
+          <button
+            type="button"
+            onClick={onEnterEdit}
+            title="Edit script text inline"
+            className="rounded-md border border-zinc-800 px-3 py-1.5 transition hover:bg-zinc-800"
+          >
+            ✎ Edit
+          </button>
+        ) : null}
 
-        <button
-          type="button"
-          onClick={restart}
-          className="rounded-md border border-zinc-800 px-3 py-1.5 transition hover:bg-zinc-800"
-        >
-          ↺ Restart
-        </button>
+        {/* v0.2: Mic / listening status indicator. Visible only while running. */}
+        {!isEditing && isRunning ? (
+          <span
+            role="status"
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] tracking-wide ${
+              isListening
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                : voiceEnabled
+                  ? 'border-zinc-700 bg-zinc-900 text-zinc-400'
+                  : 'border-zinc-800 bg-zinc-950 text-zinc-500'
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`inline-block h-1.5 w-1.5 rounded-full ${
+                isListening ? 'animate-pulse bg-emerald-400' : 'bg-zinc-600'
+              }`}
+            />
+            {isListening ? 'Listening…' : voiceEnabled ? 'Mic idle' : 'Manual mode'}
+          </span>
+        ) : null}
+
+        {!isEditing ? (
+          <button
+            type="button"
+            onClick={() => advanceCursor(1)}
+            className="rounded-md border border-zinc-800 px-3 py-1.5 transition hover:bg-zinc-800"
+            title="Advance cursor by one token (manual, for v0.1 demo)"
+          >
+            → +1
+          </button>
+        ) : null}
+
+        {!isEditing ? (
+          <button
+            type="button"
+            onClick={restart}
+            className="rounded-md border border-zinc-800 px-3 py-1.5 transition hover:bg-zinc-800"
+          >
+            ↺ Restart
+          </button>
+        ) : null}
 
         <div className="h-5 w-px bg-zinc-800" />
 
@@ -123,17 +211,22 @@ export function ControlBar() {
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={toggleMirror}
-          className={`rounded-md border px-3 py-1.5 transition ${
-            mirrorMode
-              ? 'border-amber-400 bg-amber-400/10 text-amber-300'
-              : 'border-zinc-800 hover:bg-zinc-800'
-          }`}
-        >
-          ⇋ Mirror
-        </button>
+        {/* Mirror toggle hidden in edit mode — typing into a flipped textarea
+            would be unworkable. RunController auto-saves + restores user's
+            mirror preference around the edit session. */}
+        {!isEditing ? (
+          <button
+            type="button"
+            onClick={toggleMirror}
+            className={`rounded-md border px-3 py-1.5 transition ${
+              mirrorMode
+                ? 'border-amber-400 bg-amber-400/10 text-amber-300'
+                : 'border-zinc-800 hover:bg-zinc-800'
+            }`}
+          >
+            ⇋ Mirror
+          </button>
+        ) : null}
 
         <button
           type="button"

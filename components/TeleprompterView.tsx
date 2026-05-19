@@ -74,7 +74,7 @@ export function TeleprompterView({ scriptId }: Props) {
       <div className="mx-auto max-w-5xl font-thai font-medium">
         {tokens.length === 0 ? (
           <p className="text-center text-2xl text-zinc-600">
-            (empty script — go back and add some text)
+            Start writing your script… <span className="text-zinc-700">(click ✎ Edit)</span>
           </p>
         ) : (
           tokens.map((t) => (

@@ -27,11 +27,22 @@ function WordSpanInner({ index, text, isWhitespace }: Props) {
     return <span data-word-idx={index}>{text}</span>;
   }
 
+  // v0.2 highlight grammar — luxury minimal palette:
+  //   pending    : zinc-100/30  → dim, "not yet read"
+  //   current    : amber-300    → bright single-tone accent on the live word,
+  //                with a subtle background slab so the eye locks on without
+  //                the page feeling busy. No box-shadow, no border — keeps
+  //                the typography front-and-center.
+  //   highlighted: zinc-100     → fully present but neutral, "already read"
+  //
+  // Note this inverts v0.1's pending/highlighted intensity. v0.1 had no voice
+  // signal so every word was bright; v0.2 introduces the active reading flow
+  // where dim = upcoming and full = consumed. Documented in 03 Changelog.
   const className = isCurrent
-    ? 'text-amber-400 transition-colors duration-150'
+    ? 'rounded-sm bg-amber-300/10 px-0.5 text-amber-300 transition-colors duration-150'
     : isHighlighted
-      ? 'text-zinc-500 transition-colors duration-300'
-      : 'text-zinc-100';
+      ? 'text-zinc-100 transition-colors duration-300'
+      : 'text-zinc-100/30 transition-colors duration-300';
 
   return (
     // data-word-idx is the spec-mandated attribute used by:
