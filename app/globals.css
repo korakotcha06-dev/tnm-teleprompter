@@ -1,26 +1,37 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Tailwind v4 — switch dark variant from prefers-color-scheme to class-based,
+   so the ThemeProvider can toggle `<html class="dark">` on user action. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-thai: var(--font-thai), "IBM Plex Sans Thai", "Sarabun", system-ui, -apple-system, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-thai);
+}
+
+.font-thai {
+  font-family: var(--font-thai);
+}
+
+.font-sans {
+  font-family: var(--font-sans);
+}
+
+/* Disable iOS text-size adjust so font-size controls stay accurate */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Smoother scroll for the teleprompter view auto-center */
+* {
+  scroll-behavior: smooth;
 }
