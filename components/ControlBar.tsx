@@ -2,7 +2,11 @@
 
 import Link from 'next/link';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
-import { useSettingsStore } from '@/lib/stores/useSettingsStore';
+import {
+  MANUAL_SPEED_MAX,
+  MANUAL_SPEED_MIN,
+  useSettingsStore,
+} from '@/lib/stores/useSettingsStore';
 
 type Props = {
   /**
@@ -50,8 +54,22 @@ export function ControlBar({
   const toggleMirror = useSettingsStore((s) => s.toggleMirror);
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const scrollMode = useSettingsStore((s) => s.scrollMode);
+  const setScrollMode = useSettingsStore((s) => s.setScrollMode);
+  const manualSpeed = useSettingsStore((s) => s.manualSpeed);
+  const setManualSpeed = useSettingsStore((s) => s.setManualSpeed);
 
   const isEditing = mode === 'edit';
+  const isManual = scrollMode === 'manual';
+
+  // Switching mode while running would orphan an rAF loop (manual) or a
+  // SpeechEngine session (voice). Pause first so the relevant useEffect
+  // cleanups fire deterministically, then swap.
+  const handleSetMode = (next: 'voice' | 'manual') => {
+    if (next === scrollMode) return;
+    if (isRunning) pause();
+    setScrollMode(next);
+  };
 
   return (
     <div
@@ -87,9 +105,11 @@ export function ControlBar({
             title={
               !canStartVoice
                 ? 'Add some script text first'
-                : voiceEnabled
-                  ? 'Start voice-driven highlighting'
-                  : 'Start in manual mode (voice unsupported)'
+                : isManual
+                  ? 'Start auto-scroll at the chosen speed'
+                  : voiceEnabled
+                    ? 'Start voice-driven highlighting'
+                    : 'Start in manual mode (voice unsupported)'
             }
             className="rounded-md bg-amber-400 px-3 py-1.5 font-medium text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -118,8 +138,46 @@ export function ControlBar({
           </button>
         ) : null}
 
-        {/* v0.2: Mic / listening status indicator. Visible only while running. */}
-        {!isEditing && isRunning ? (
+        {/* v0.3: Scroll-mode toggle. Hidden during edit. Segmented control
+            so both options are visible at once — luxury minimal: a thin
+            outer border, amber fill on the active segment. */}
+        {!isEditing ? (
+          <div
+            role="group"
+            aria-label="Scroll mode"
+            className="inline-flex overflow-hidden rounded-md border border-zinc-800 text-[11px]"
+          >
+            <button
+              type="button"
+              onClick={() => handleSetMode('voice')}
+              aria-pressed={!isManual}
+              title="Voice-driven highlight (Web Speech)"
+              className={`px-2.5 py-1.5 transition ${
+                !isManual
+                  ? 'bg-amber-400 font-medium text-black'
+                  : 'text-zinc-400 hover:bg-zinc-800'
+              }`}
+            >
+              🎙 Voice
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetMode('manual')}
+              aria-pressed={isManual}
+              title="Constant-speed auto-scroll (no microphone)"
+              className={`border-l border-zinc-800 px-2.5 py-1.5 transition ${
+                isManual
+                  ? 'bg-amber-400 font-medium text-black'
+                  : 'text-zinc-400 hover:bg-zinc-800'
+              }`}
+            >
+              ⇅ Manual
+            </button>
+          </div>
+        ) : null}
+
+        {/* Voice mode status indicator. Visible only while running + voice mode. */}
+        {!isEditing && isRunning && !isManual ? (
           <span
             role="status"
             className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] tracking-wide ${
@@ -140,12 +198,43 @@ export function ControlBar({
           </span>
         ) : null}
 
-        {!isEditing ? (
+        {/* v0.3 Manual mode speed control — slider + numeric WPM readout.
+            Hidden in voice mode. Live updates: dragging while running
+            adjusts pps on the next rAF tick (useManualScroll deps on wpm). */}
+        {!isEditing && isManual ? (
+          <div className="inline-flex items-center gap-2">
+            <label
+              htmlFor="manual-speed"
+              className="text-[11px] uppercase tracking-[0.14em] text-zinc-500"
+            >
+              Speed
+            </label>
+            <input
+              id="manual-speed"
+              type="range"
+              min={MANUAL_SPEED_MIN}
+              max={MANUAL_SPEED_MAX}
+              step={5}
+              value={manualSpeed}
+              onChange={(e) => setManualSpeed(Number(e.target.value))}
+              className="h-1 w-32 cursor-pointer appearance-none rounded-full bg-zinc-800 accent-amber-400"
+              aria-label="Scroll speed in words per minute"
+            />
+            <span className="w-14 text-center tabular-nums text-zinc-400">
+              {manualSpeed} wpm
+            </span>
+          </div>
+        ) : null}
+
+        {/* Manual +1 word — useful in voice mode for nudging the cursor
+            when the matcher missed something. Hidden in manual mode (no
+            cursor to advance) and edit mode. */}
+        {!isEditing && !isManual ? (
           <button
             type="button"
             onClick={() => advanceCursor(1)}
             className="rounded-md border border-zinc-800 px-3 py-1.5 transition hover:bg-zinc-800"
-            title="Advance cursor by one token (manual, for v0.1 demo)"
+            title="Advance cursor by one token (manual nudge)"
           >
             → +1
           </button>

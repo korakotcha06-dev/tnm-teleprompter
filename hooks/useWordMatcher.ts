@@ -2,29 +2,33 @@
 
 // useWordMatcher — bridges SpeechEngine results → useScriptStore.advanceCursor.
 //
-// v0.2 strategy (exact-match only):
+// v0.3 strategy (skip-ahead fuzzy match):
 //   1. Each speech `onResult` fires with `fullTranscript` (cumulative since
 //      start). We tokenize the FULL transcript every time and slice off the
-//      portion we've already matched — this avoids the "stream of interims
-//      double-fires the same word" trap.
-//   2. For each NEW heard word, try matchSequenceExact against the next 3
-//      word-like tokens in the script starting from the live cursor.
+//      portion we've already matched.
+//   2. For each NEW heard word, run matchSequence (WINDOW=10, fuzzy=2) against
+//      the live cursor. The matcher can jump forward up to 10 word-tokens if
+//      the speaker skipped or mispronounced words.
 //   3. On match → advanceCursor by (matchedIdx - cursor + 1). The store's
 //      built-in highlight semantics fill in any tokens between old and new
 //      cursor automatically.
+//   4. NEW: if the matcher reports skipped indices (jump > SKIP_THRESHOLD),
+//      bulk-mark them as "skipped" so WordSpan can paint them in the muted
+//      state — distinct from "consumed". Visual signal to Touch that the
+//      engine recognized the skip rather than treating those words as read.
 //
-// What we DON'T do (intentional v0.2 scope guard):
-//   - No fuzzy match / Levenshtein (v0.3).
-//   - No auto-scroll wiring beyond what TeleprompterView already has.
-//   - No re-tokenization of the script — that's already done by the store on
+// What we DON'T do (intentional scope guard):
+//   - No re-tokenization of the script — that's done by the store on
 //     `setTokensFromContent`. We read `tokens` straight from the store.
+//   - No mode awareness — useVoiceMode is responsible for not arming the
+//     matcher in manual scroll mode.
 
 import { useCallback, useRef } from 'react';
 import type { Language } from '@/types';
 import type { SpeechResult } from '@/lib/speech/recognition';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
 import { tokenize } from '@/lib/matcher/tokenize';
-import { matchSequenceExact } from '@/lib/matcher/exactMatch';
+import { matchSequence } from '@/lib/matcher/window-match';
 
 type UseWordMatcherReturn = {
   /** Pass this to useSpeechRecognition's `onResult` option. */
@@ -58,13 +62,22 @@ export function useWordMatcher(language: Language): UseWordMatcherReturn {
 
       if (newHeardWords.length === 0) return;
 
-      const matchedIdx = matchSequenceExact(newHeardWords, state.tokens, state.cursor);
+      const { matchedIdx, skippedIndices } = matchSequence(
+        newHeardWords,
+        state.tokens,
+        state.cursor
+      );
 
       if (matchedIdx >= 0) {
-        // Advance past the matched token. The store highlights every index
-        // from old cursor through matchedIdx (whitespace included), which
-        // visually feels right: skipped filler words don't stay dimmed
-        // forever once you've spoken past them.
+        // v0.3: mark skipped words BEFORE advancing the cursor. Order matters
+        // because advanceCursor adds every index in [cursor, matchedIdx] to
+        // highlightedIndices — if WordSpan saw a token in BOTH sets it would
+        // ambiguously render. We resolve that in WordSpan by preferring
+        // `skipped` styling when both bits are set, so the mark-first-then-
+        // advance order keeps the UI honest even mid-batch.
+        if (skippedIndices.length > 0) {
+          state.markSkipped(skippedIndices);
+        }
         const advanceBy = matchedIdx - state.cursor + 1;
         state.advanceCursor(advanceBy);
         // Mark every heard word in this batch as consumed — even ones that

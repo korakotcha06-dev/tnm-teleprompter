@@ -20,7 +20,22 @@ type ScriptStoreState = {
   tokens: Token[];
   cursor: number;
   highlightedIndices: Set<number>;
+  /**
+   * v0.3: word-like token indices that the matcher JUMPED over when the
+   * speaker skipped a chunk of script (jump > SKIP_THRESHOLD). Rendered in
+   * a muted-but-readable state — distinct from "consumed" (highlightedIndices)
+   * and "pending" (neither). Lets Touch see at a glance that the engine
+   * recognized the skip and didn't get stuck.
+   */
+  skippedIndices: Set<number>;
   isRunning: boolean;
+  /**
+   * v0.3: monotonically increments every time `restart()` runs. The
+   * teleprompter view subscribes to it to reset its scroll container to the
+   * top — necessary because in manual mode `cursor` stays 0 throughout, so
+   * a cursor-based scroll-reset effect would never fire on a restart.
+   */
+  restartNonce: number;
   /**
    * v0.2: true when the Web Speech engine is actively listening. Written by
    * the `useVoiceMode` hook (run page) and read by ControlBar for the status
@@ -50,6 +65,8 @@ type ScriptStoreState = {
   restart: () => void;
   advanceCursor: (n?: number) => void;
   markHighlighted: (index: number) => void;
+  /** v0.3: bulk-mark word indices as "skipped". Idempotent / additive. */
+  markSkipped: (indices: number[]) => void;
   setIsListening: (value: boolean) => void;
 };
 
@@ -75,7 +92,9 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
   tokens: [],
   cursor: 0,
   highlightedIndices: new Set<number>(),
+  skippedIndices: new Set<number>(),
   isRunning: false,
+  restartNonce: 0,
   isListening: false,
 
   hydrate: () => {
@@ -127,6 +146,7 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
       tokens,
       cursor: 0,
       highlightedIndices: new Set<number>(),
+      skippedIndices: new Set<number>(),
       isRunning: false,
       isListening: false,
     });
@@ -135,12 +155,14 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
   start: () => set({ isRunning: true }),
   pause: () => set({ isRunning: false, isListening: false }),
   restart: () =>
-    set({
+    set((s) => ({
       cursor: 0,
       highlightedIndices: new Set<number>(),
+      skippedIndices: new Set<number>(),
       isRunning: false,
       isListening: false,
-    }),
+      restartNonce: s.restartNonce + 1,
+    })),
 
   advanceCursor: (n = 1) =>
     set((s) => {
@@ -155,6 +177,14 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
       const newSet = new Set(s.highlightedIndices);
       newSet.add(index);
       return { highlightedIndices: newSet };
+    }),
+
+  markSkipped: (indices) =>
+    set((s) => {
+      if (indices.length === 0) return s;
+      const newSet = new Set(s.skippedIndices);
+      for (const i of indices) newSet.add(i);
+      return { skippedIndices: newSet };
     }),
 
   setIsListening: (value) => set({ isListening: value }),

@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ScriptSettings, Theme } from '@/types';
+import type { ScriptSettings, Theme, ScrollMode } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 
 type SettingsState = ScriptSettings & {
@@ -11,6 +11,7 @@ type SettingsState = ScriptSettings & {
   setTheme: (t: Theme) => void;
   toggleMirror: () => void;
   setManualSpeed: (n: number) => void;
+  setScrollMode: (m: ScrollMode) => void;
   reset: () => void;
 };
 
@@ -19,6 +20,10 @@ export const FONT_SIZE_MIN = 24;
 export const FONT_SIZE_MAX = 96;
 export const LINE_HEIGHT_MIN = 1.2;
 export const LINE_HEIGHT_MAX = 2.4;
+
+// v0.3: manual mode slider range (Touch brief)
+export const MANUAL_SPEED_MIN = 50;
+export const MANUAL_SPEED_MAX = 200;
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -36,9 +41,41 @@ export const useSettingsStore = create<SettingsState>()(
       setTheme: (t) => set({ theme: t }),
       toggleMirror: () => set((s) => ({ mirrorMode: !s.mirrorMode })),
       setManualSpeed: (n) =>
-        set({ manualSpeed: Math.max(30, Math.min(300, Math.round(n))) }),
+        set({
+          manualSpeed: Math.max(
+            MANUAL_SPEED_MIN,
+            Math.min(MANUAL_SPEED_MAX, Math.round(n))
+          ),
+        }),
+      setScrollMode: (m) => set({ scrollMode: m }),
       reset: () => set(DEFAULT_SETTINGS),
     }),
-    { name: 'teleprompter.settings' }
+    {
+      name: 'teleprompter.settings',
+      // Backfill scrollMode for users who persisted v0.2 settings (where
+      // the field didn't exist). Without this, hydrate returns
+      // scrollMode=undefined and the Manual toggle is dead on first load.
+      // We deliberately don't bump schemaVersion — this is an additive
+      // optional field, not a breaking change.
+      migrate: (persisted: unknown) => {
+        if (persisted && typeof persisted === 'object') {
+          const p = persisted as Partial<ScriptSettings>;
+          return {
+            ...DEFAULT_SETTINGS,
+            ...p,
+            scrollMode: p.scrollMode ?? 'voice',
+            manualSpeed:
+              typeof p.manualSpeed === 'number'
+                ? Math.max(
+                    MANUAL_SPEED_MIN,
+                    Math.min(MANUAL_SPEED_MAX, p.manualSpeed)
+                  )
+                : DEFAULT_SETTINGS.manualSpeed,
+          };
+        }
+        return DEFAULT_SETTINGS;
+      },
+      version: 1,
+    }
   )
 );

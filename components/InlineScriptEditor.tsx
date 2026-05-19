@@ -169,7 +169,7 @@ export function InlineScriptEditor({ script, onExit }: Props) {
   }, [content, fontSize, lineHeight]);
 
   return (
-    <div className="min-h-screen w-full bg-black px-12 py-32">
+    <div className="h-screen w-full overflow-y-auto bg-black px-12 py-32">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
         {/* Title input — slim, no heavy border. Subtle underline only when
             focused, matching the luxury minimal tone. */}

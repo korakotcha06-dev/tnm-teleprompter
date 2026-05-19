@@ -71,12 +71,18 @@ export function RunController({ scriptId }: Props) {
 
   const language: Language = script?.language ?? 'th';
 
-  // Voice mode only enabled when permission is granted AND we're not in
-  // edit mode (mutually exclusive with the inline editor). useVoiceMode
-  // handles the stop side via its isRunning watcher — we just need to
-  // ensure isRunning flips to false when entering edit, which is done in
-  // `enterEdit` below.
-  const voiceEnabled = permissionResolved === 'granted' && mode === 'view';
+  // v0.3 scroll mode — selected by the user via ControlBar toggle. Voice
+  // mode arms the SpeechEngine; manual mode runs a WPM-driven scroller
+  // (handled inside TeleprompterView). They're mutually exclusive.
+  const scrollMode = useSettingsStore((s) => s.scrollMode);
+
+  // Voice mode only enabled when permission is granted AND we're in view
+  // mode AND the user picked the voice scroll mode. useVoiceMode handles
+  // the stop side via its isRunning watcher — we just need to ensure
+  // isRunning flips to false when entering edit (done in `enterEdit` below)
+  // and ensure voice doesn't fire when manual mode owns playback.
+  const voiceEnabled =
+    permissionResolved === 'granted' && mode === 'view' && scrollMode === 'voice';
 
   const voice = useVoiceMode({ language, enabled: voiceEnabled });
 
@@ -125,7 +131,7 @@ export function RunController({ scriptId }: Props) {
   const hasContent = (script?.content?.trim().length ?? 0) > 0;
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100">
+    <div className="h-screen overflow-hidden bg-black text-zinc-100">
       {mode === 'edit' && script ? (
         <InlineScriptEditor script={script} onExit={exitEdit} />
       ) : (
@@ -140,8 +146,11 @@ export function RunController({ scriptId }: Props) {
         canStartVoice={hasContent && mode === 'view'}
       />
 
-      {/* Spacer so the last lines aren't hidden behind the fixed control bar */}
-      <div className="h-32" />
+      {/* v0.3: removed the bottom spacer from v0.2. The teleprompter view
+          now owns the viewport (h-screen) so the ControlBar's fixed
+          positioning overlays it cleanly. The wrapper's py-32 padding
+          inside the scroll area gives the last line enough breathing room
+          to scroll above the control bar. */}
 
       <MicPermissionGate onResolved={setPermissionResolved} />
 

@@ -17,6 +17,7 @@ type Props = {
  */
 function WordSpanInner({ index, text, isWhitespace }: Props) {
   const isHighlighted = useScriptStore((s) => s.highlightedIndices.has(index));
+  const isSkipped = useScriptStore((s) => s.skippedIndices.has(index));
   const isCurrent = useScriptStore((s) => s.cursor === index);
 
   // Whitespace tokens still carry `data-word-idx` so the token-index space
@@ -27,27 +28,29 @@ function WordSpanInner({ index, text, isWhitespace }: Props) {
     return <span data-word-idx={index}>{text}</span>;
   }
 
-  // v0.2 highlight grammar — luxury minimal palette:
+  // v0.3 highlight grammar — four-state palette:
   //   pending    : zinc-100/30  → dim, "not yet read"
-  //   current    : amber-300    → bright single-tone accent on the live word,
-  //                with a subtle background slab so the eye locks on without
-  //                the page feeling busy. No box-shadow, no border — keeps
-  //                the typography front-and-center.
-  //   highlighted: zinc-100     → fully present but neutral, "already read"
+  //   current    : amber-300    → live cursor, subtle bg slab
+  //   highlighted: zinc-100     → fully present, "already read"
+  //   skipped    : zinc-400     → muted-readable, "speaker jumped past this"
+  //                Between pending and consumed. Touch sees the skip without
+  //                being confused into thinking those words were spoken.
   //
-  // Note this inverts v0.1's pending/highlighted intensity. v0.1 had no voice
-  // signal so every word was bright; v0.2 introduces the active reading flow
-  // where dim = upcoming and full = consumed. Documented in 03 Changelog.
+  // Priority order when multiple flags are set (can happen because the
+  // matcher marks-skipped + advances-cursor in the same tick):
+  //   current > skipped > highlighted > pending
   const className = isCurrent
     ? 'rounded-sm bg-amber-300/10 px-0.5 text-amber-300 transition-colors duration-150'
-    : isHighlighted
-      ? 'text-zinc-100 transition-colors duration-300'
-      : 'text-zinc-100/30 transition-colors duration-300';
+    : isSkipped
+      ? 'text-zinc-400 italic transition-colors duration-300'
+      : isHighlighted
+        ? 'text-zinc-100 transition-colors duration-300'
+        : 'text-zinc-100/30 transition-colors duration-300';
 
   return (
     // data-word-idx is the spec-mandated attribute used by:
-    //   - TeleprompterView auto-scroll querySelector
-    //   - v0.3 word-matcher (highlight lookup)
+    //   - useAutoScroll querySelector (v0.3)
+    //   - word-matcher (highlight lookup)
     //   - QA acceptance test (verifies tokenization is 0-based + sequential)
     <span data-word-idx={index} className={className}>
       {text}

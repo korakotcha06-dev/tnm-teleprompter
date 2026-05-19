@@ -5,12 +5,23 @@
 export type Theme = 'dark' | 'light';
 export type Language = 'th' | 'en';
 
+/**
+ * v0.3: scroll mode toggle. 'voice' = highlight + auto-scroll driven by Web
+ * Speech matcher. 'manual' = constant-velocity scroll at `manualSpeed` WPM,
+ * no highlighting (visual reading guide replaces it). Persisted in
+ * UserSettings (window-level), not per-script — Touch picks one default
+ * style for the device.
+ */
+export type ScrollMode = 'voice' | 'manual';
+
 export type ScriptSettings = {
   fontSize: number; // px
   lineHeight: number;
   theme: Theme;
   mirrorMode: boolean;
-  manualSpeed: number; // words per minute (fallback when voice off; full use in v0.2)
+  manualSpeed: number; // words per minute (used by v0.3 manual scroll mode)
+  /** v0.3: 'voice' or 'manual'. Defaults to 'voice'. */
+  scrollMode: ScrollMode;
 };
 
 export type Script = {
@@ -34,5 +45,6 @@ export const DEFAULT_SETTINGS: ScriptSettings = {
   lineHeight: 1.6,
   theme: 'dark',
   mirrorMode: false,
-  manualSpeed: 130,
+  manualSpeed: 120, // v0.3 brief: slider range 50–200 wpm, default 120
+  scrollMode: 'voice',
 };
