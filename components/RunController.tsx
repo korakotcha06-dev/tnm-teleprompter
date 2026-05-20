@@ -84,6 +84,12 @@ export function RunController({ scriptId }: Props) {
   const scrollMode = useSettingsStore((s) => s.scrollMode);
   const setScrollMode = useSettingsStore((s) => s.setScrollMode);
 
+  // v0.5.0 run-view skin: the warm-dark run stage flips to a light variant
+  // (#F5F1E8 paper) via the existing settings `theme` flag — the Light toggle
+  // in the ControlBar drives setTheme. We mirror it onto `.run-stage.light`
+  // so the run view re-colors (text + cur slab + bar) without touching logic.
+  const theme = useSettingsStore((s) => s.theme);
+
   // Voice mode only enabled when permission is granted AND we're in view
   // mode AND the user picked the voice scroll mode. useVoiceMode handles
   // the stop side via its isRunning watcher — we just need to ensure
@@ -209,7 +215,13 @@ export function RunController({ scriptId }: Props) {
   const hasContent = (script?.content?.trim().length ?? 0) > 0;
 
   return (
-    <div className="h-screen overflow-hidden bg-black text-zinc-100">
+    <div className={`run-stage ${theme === 'light' ? 'light' : ''}`}>
+      {/* Subtle brand watermark, top-left. Decorative only. */}
+      <div className="run-mark">
+        <div className="bm">T</div>
+        <span className="lab">Touchnewmedia · Teleprompter</span>
+      </div>
+
       {mode === 'edit' && script ? (
         <InlineScriptEditor script={script} onExit={exitEdit} />
       ) : (
@@ -223,12 +235,6 @@ export function RunController({ scriptId }: Props) {
         onExitEdit={exitEdit}
         canStartVoice={hasContent && mode === 'view'}
       />
-
-      {/* v0.3: removed the bottom spacer from v0.2. The teleprompter view
-          now owns the viewport (h-screen) so the ControlBar's fixed
-          positioning overlays it cleanly. The wrapper's py-32 padding
-          inside the scroll area gives the last line enough breathing room
-          to scroll above the control bar. */}
 
       <MicPermissionGate onResolved={setPermissionResolved} />
 

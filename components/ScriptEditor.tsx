@@ -37,7 +37,11 @@ export function ScriptEditor({ active }: Props) {
   const handleSave = () => {
     if (!title.trim() && !content.trim()) return;
     if (active) {
-      updateScript(active.id, { title: title.trim() || 'Untitled', content, language });
+      updateScript(active.id, {
+        title: title.trim() || 'Untitled',
+        content,
+        language,
+      });
     } else {
       const s = createScript(title || 'Untitled', content, language);
       setActive(s.id);
@@ -50,81 +54,92 @@ export function ScriptEditor({ active }: Props) {
     setActive(null);
   };
 
+  const charCount = content.length;
   const wordCount = content.split(/\s+/).filter(Boolean).length;
   const estMin = Math.max(1, Math.ceil(wordCount / 130));
 
   return (
-    <section className="flex flex-1 flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-      <header className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            {active ? 'Edit Script' : 'New Script'}
-          </h2>
-          {savedAt && (
-            <p className="text-xs text-emerald-500">Saved at {savedAt}</p>
-          )}
+    <section className="panel" aria-label="Editor">
+      <div className="panel-head">
+        <div className="title">
+          <span className="marker" />
+          {active ? 'Edit Script' : 'New Script'}
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handleNew}
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            New
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" onClick={handleNew} className="btn btn-sm">
+            + New
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="rounded-md bg-amber-400 px-3 py-1.5 text-xs font-medium text-black transition hover:bg-amber-300"
+            className="btn btn-primary btn-sm"
           >
-            Save
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M2 8 L6 12 L14 4" />
+            </svg>
+            Save to Library
           </button>
           {active && (
-            <Link
-              href={`/run?id=${active.id}`}
-              className="rounded-md border border-amber-400 px-3 py-1.5 text-xs font-medium text-amber-500 transition hover:bg-amber-400 hover:text-black"
-            >
-              ▶ Run
+            <Link href={`/run?id=${active.id}`} className="btn btn-sm">
+              <svg width="10" height="10" viewBox="0 0 12 12">
+                <path d="M2 1 L10 6 L2 11 Z" fill="currentColor" />
+              </svg>
+              Run
             </Link>
           )}
         </div>
-      </header>
-
-      <input
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Script title…"
-        className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 outline-none transition focus:border-amber-400 dark:border-zinc-800 dark:bg-black dark:text-zinc-100"
-      />
-
-      <div className="flex items-center gap-2 text-xs">
-        <label className="text-zinc-500">Language:</label>
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value as Language)}
-          className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-zinc-800 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
-        >
-          <option value="th">ไทย (th)</option>
-          <option value="en">English (en)</option>
-        </select>
       </div>
 
-      <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder={
-          language === 'th'
-            ? 'พิมพ์สคริปต์ของคุณที่นี่…'
-            : 'Type your script here…'
-        }
-        rows={16}
-        className="flex-1 resize-none rounded-md border border-zinc-300 bg-white px-3 py-2 font-thai text-base leading-relaxed text-zinc-900 outline-none transition focus:border-amber-400 dark:border-zinc-800 dark:bg-black dark:text-zinc-100"
-      />
+      <div className="editor-grid">
+        <input
+          type="text"
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Script title — e.g. บทเรียนที่ 3: การจัดองค์ประกอบภาพ"
+        />
 
-      <p className="text-xs text-zinc-500">
-        {content.length} chars · {wordCount} words · ~{estMin} min @ 130 wpm
-      </p>
+        <div className="field-row">
+          <textarea
+            className="textarea"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={
+              language === 'th'
+                ? 'พิมพ์หรือวางสคริปต์ของคุณที่นี่ — กด Save เพื่อบันทึก หรือกด Run จาก Library เพื่อขึ้นจอ'
+                : 'Type or paste your script here — hit Save, then Run it from the Library.'
+            }
+          />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span className="label-inline">Language</span>
+            <select
+              className="select"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
+            >
+              <option value="th">ไทย (Thai)</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div className="editor-foot stats" style={{ border: 'none', background: 'none', padding: 0 }}>
+            <span>
+              <span className="v">{charCount}</span> chars
+            </span>
+            <span>
+              <span className="v">{wordCount}</span> words
+            </span>
+            <span>
+              <span className="v">~{estMin}</span> min @ 130 wpm
+            </span>
+          </div>
+        </div>
+        {savedAt && (
+          <p className="editor-saved label-inline">Saved at {savedAt}</p>
+        )}
+      </div>
     </section>
   );
 }

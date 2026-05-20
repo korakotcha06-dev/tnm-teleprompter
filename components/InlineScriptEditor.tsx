@@ -169,7 +169,12 @@ export function InlineScriptEditor({ script, onExit }: Props) {
   }, [content, fontSize, lineHeight]);
 
   return (
-    <div className="h-screen w-full overflow-y-auto bg-black px-12 py-32">
+    // v0.5.0: flex-fill the run stage (inherits the stage bg so the Light theme
+    // applies here too) instead of forcing a black full-screen box.
+    <div
+      className="run-scroll"
+      style={{ overflowY: 'auto', display: 'block', padding: '12vh 36px 30vh' }}
+    >
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
         {/* Title input — slim, no heavy border. Subtle underline only when
             focused, matching the luxury minimal tone. */}

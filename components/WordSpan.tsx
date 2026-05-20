@@ -12,8 +12,7 @@ type Props = {
 /**
  * Renders a single tokenized unit. Memoized + uses selector subscription
  * so only the spans whose state actually changes re-render — critical when
- * voice integration arrives in v0.2 and highlights advance 3-10 times/sec
- * across hundreds of words.
+ * voice highlights advance several times/sec across hundreds of words.
  */
 function WordSpanInner({ index, text, isWhitespace }: Props) {
   const isHighlighted = useScriptStore((s) => s.highlightedIndices.has(index));
@@ -21,38 +20,33 @@ function WordSpanInner({ index, text, isWhitespace }: Props) {
   const isCurrent = useScriptStore((s) => s.cursor === index);
 
   // Whitespace tokens still carry `data-word-idx` so the token-index space
-  // in the DOM is contiguous (0…N-1, no gaps) — required by v0.1 Acceptance
-  // Criteria. They render as bare text (no highlight state) and the matcher
-  // skips them by content.
+  // in the DOM is contiguous (0…N-1, no gaps) — required by the v0.1
+  // Acceptance Criteria. They render as bare text (no highlight state).
   if (isWhitespace) {
     return <span data-word-idx={index}>{text}</span>;
   }
 
-  // v0.3 highlight grammar — four-state palette:
-  //   pending    : zinc-100/30  → dim, "not yet read"
-  //   current    : amber-300    → live cursor, subtle bg slab
-  //   highlighted: zinc-100     → fully present, "already read"
-  //   skipped    : zinc-400     → muted-readable, "speaker jumped past this"
-  //                Between pending and consumed. Touch sees the skip without
-  //                being confused into thinking those words were spoken.
-  //
-  // Priority order when multiple flags are set (can happen because the
-  // matcher marks-skipped + advances-cursor in the same tick):
-  //   current > skipped > highlighted > pending
-  const className = isCurrent
-    ? 'rounded-sm bg-amber-300/10 px-0.5 text-amber-300 transition-colors duration-150'
+  // v0.5.0: highlight grammar mapped onto the brand `.w` classes (styled in
+  // globals.css, dark + .run-stage.light variants). Four-state palette:
+  //   pending    : dim "not yet read"
+  //   current    : amber slab (.cur) — warm-dark bg / amber text (light: amber bg / black)
+  //   read        : full-strength "already read"
+  //   skipped    : muted-readable "speaker jumped past this"
+  // Priority order when multiple flags are set (matcher may mark-skipped +
+  // advance-cursor in the same tick): current > skipped > read > pending.
+  const state = isCurrent
+    ? 'cur'
     : isSkipped
-      ? 'text-zinc-400 italic transition-colors duration-300'
+      ? 'skipped'
       : isHighlighted
-        ? 'text-zinc-100 transition-colors duration-300'
-        : 'text-zinc-100/30 transition-colors duration-300';
+        ? 'read'
+        : 'pending';
 
+  // data-word-idx is the spec-mandated attribute used by useAutoScroll's
+  // querySelector, the word-matcher highlight lookup, and the QA tokenization
+  // acceptance test.
   return (
-    // data-word-idx is the spec-mandated attribute used by:
-    //   - useAutoScroll querySelector (v0.3)
-    //   - word-matcher (highlight lookup)
-    //   - QA acceptance test (verifies tokenization is 0-based + sequential)
-    <span data-word-idx={index} className={className}>
+    <span data-word-idx={index} className={`w ${state}`}>
       {text}
     </span>
   );
