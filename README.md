@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Teleprompter
 
-## Getting Started
+A free, voice-detect teleprompter by **Touchnewmedia Co., Ltd.** — read your script aloud and the page highlights + auto-scrolls to follow your voice. Thai-first, English supported. No accounts, no backend — scripts live in your browser.
 
-First, run the development server:
+**Live:** https://thetnm.com/teleprompter
+
+## Stack
+
+Next.js 16 (App Router, static export) · React 19 · TypeScript · Tailwind v4 · Zustand v5 · Web Speech API · IBM Plex + Montserrat fonts. localStorage only (no backend yet).
+
+## Develop
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev          # next dev -p 3010
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> Note: `basePath` is `/teleprompter`, so in dev the app lives at **http://localhost:3010/teleprompter** (the root `/` 404s).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build        # next build → static out/ (deploy/.htaccess copied into out/)
+npm run test:matcher # matcher unit tests
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploy
 
-## Learn More
+Static export to a WordPress/PHP shared host (Plesk) under `httpdocs/teleprompter/`. Upload the **contents of `out/`** into the host's `/teleprompter/` folder (not the `out/` folder itself — every asset URL is `/teleprompter/_next/...`). The committed `deploy/.htaccess` ships inside `out/` to override WordPress's root catch-all. See [SPEC.md](./SPEC.md) §6 for full deploy + curl-verify steps.
 
-To learn more about Next.js, take a look at the following resources:
+## Docs
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [SPEC.md](./SPEC.md) — architecture, features, deploy, roadmap, version table
+- Obsidian TNM Vault → `Teleprompter/` — Client Guide, Developer Guide, Changelog, API & Component Reference, Testing Checklist
