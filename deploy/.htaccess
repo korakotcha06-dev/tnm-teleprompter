@@ -1,0 +1,29 @@
+# Teleprompter — static export served at https://thetnm.com/teleprompter/
+# This file lives INSIDE /teleprompter/ and overrides the parent WordPress
+# rewrite so WP does not swallow this subpath.
+# Source of truth: copied into out/ after every `next build` (build wipes out/).
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /teleprompter/
+
+  # Serve existing files/directories directly (this is a fully static site —
+  # every route is a real folder with index.html, so no SPA fallback needed).
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Anything that isn't a real file/dir → the teleprompter home (graceful).
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Long-cache the immutable hashed assets
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|woff2|ico|svg)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # HTML should always revalidate so new deploys show up
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
