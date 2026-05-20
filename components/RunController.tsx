@@ -34,6 +34,8 @@ import { ControlBar } from './ControlBar';
 import { MicPermissionGate } from './MicPermissionGate';
 import { InlineScriptEditor } from './InlineScriptEditor';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
+import { useMicPermission } from '@/hooks/useMicPermission';
+import { presentSpeechError } from '@/lib/speech/errorMessages';
 import type { Language } from '@/types';
 
 type Props = {
@@ -46,6 +48,7 @@ export function RunController({ scriptId }: Props) {
   const script = useScriptStore((s) => s.scripts.find((x) => x.id === scriptId));
   const pause = useScriptStore((s) => s.pause);
   const restart = useScriptStore((s) => s.restart);
+  const start = useScriptStore((s) => s.start);
 
   // v0.2: mode toggle. 'view' = teleprompter render + voice eligible.
   //                    'edit' = InlineScriptEditor mounted, voice paused.
@@ -79,6 +82,7 @@ export function RunController({ scriptId }: Props) {
   // mode arms the SpeechEngine; manual mode runs a WPM-driven scroller
   // (handled inside TeleprompterView). They're mutually exclusive.
   const scrollMode = useSettingsStore((s) => s.scrollMode);
+  const setScrollMode = useSettingsStore((s) => s.setScrollMode);
 
   // Voice mode only enabled when permission is granted AND we're in view
   // mode AND the user picked the voice scroll mode. useVoiceMode handles
@@ -89,6 +93,19 @@ export function RunController({ scriptId }: Props) {
     permissionResolved === 'granted' && mode === 'view' && scrollMode === 'voice';
 
   const voice = useVoiceMode({ language, enabled: voiceEnabled });
+
+  // v0.4.2 self-heal: live mic-permission state shared with MicPermissionGate.
+  // We use it here for two things the gate can't do alone:
+  //   1. retryVoice() must RE-REQUEST getUserMedia (the only thing that fires
+  //      the native Chrome prompt) before re-arming SpeechEngine — otherwise
+  //      "ลองอีกครั้ง" just restarts recognition and instantly re-fails,
+  //      which was the v0.4 loop.
+  //   2. When the user fixes permission externally while the error banner is
+  //      up, `micPermission.state` flips to 'granted' (via Permissions API
+  //      onchange) and the effect below auto-clears the banner + re-enables
+  //      Start with no reload. On iOS (state 'unknown') this self-heal isn't
+  //      available, which matches v0.4 behavior — no regression.
+  const micPermission = useMicPermission();
 
   // If the user denied or is on an unsupported browser, ensure we don't
   // leave isRunning=true silently — that would show "Pause" with no way for
@@ -129,6 +146,62 @@ export function RunController({ scriptId }: Props) {
     setMode('view');
   }, [toggleMirror, toggleMirrorV]);
 
+  // v0.4.2 voice-error recovery — THE LOOP FIX.
+  //
+  // The v0.4.1 retry only called restart()+start(), which re-armed
+  // SpeechRecognition without ever calling getUserMedia. For a 'not-allowed'
+  // error that meant: restart → recognition.start() → instant 'not-allowed'
+  // again → banner → user taps retry → repeat. No native prompt ever fired.
+  //
+  // Fix: retry now RE-REQUESTS getUserMedia first (the only API that triggers
+  // the browser's permission prompt). This runs inside the button's click
+  // handler, so the user gesture is on the stack — Chrome will show the prompt
+  // when state is 'prompt'. Only after a successful grant do we re-arm voice.
+  //   - granted   → restart() + start() → SpeechEngine listens, error clears.
+  //   - still denied → the gate/banner stay up; nothing loops because we don't
+  //     blindly restart a recognizer that will instantly re-fail.
+  const retryVoice = useCallback(async () => {
+    const result = await micPermission.request();
+    if (result.ok) {
+      restart();
+      start();
+    }
+    // On failure, micPermission.state reflects denied/unknown and the banner
+    // remains — no recognizer restart, so no instant-re-fail loop.
+  }, [micPermission, restart, start]);
+
+  // Self-heal: if mic permission flips to 'granted' (user unblocked the site
+  // / OS) while a voice error banner is showing, silently re-arm voice so the
+  // banner clears and Start works again — no manual retry, no reload. Guarded
+  // on an active error + voice mode so we don't fire spuriously. On iOS the
+  // state stays 'unknown' (no Permissions API), so this never runs there —
+  // matching v0.4 behavior exactly (no regression).
+  const healArmedRef = useRef(false);
+  useEffect(() => {
+    if (
+      micPermission.state === 'granted' &&
+      voice.error &&
+      scrollMode === 'voice' &&
+      mode === 'view' &&
+      !healArmedRef.current
+    ) {
+      healArmedRef.current = true;
+      restart();
+      start();
+    }
+    // Re-arm the one-shot guard once the error is gone, so a *future* external
+    // re-deny → re-grant cycle can heal again.
+    if (!voice.error) healArmedRef.current = false;
+  }, [micPermission.state, voice.error, scrollMode, mode, restart, start]);
+
+  // switchToManual → stop voice, flip scroll mode. The user then presses Start
+  // (now a WPM auto-scroll) from the ControlBar. Reuses the same store action
+  // the ControlBar's Manual segment uses — no new logic path.
+  const switchToManual = useCallback(() => {
+    pause();
+    setScrollMode('manual');
+  }, [pause, setScrollMode]);
+
   // An empty script (token count would be 0 after re-tokenize) should not
   // allow voice Start — there's nothing to match against. We derive this
   // from the script's content directly so the gating doesn't depend on the
@@ -159,16 +232,83 @@ export function RunController({ scriptId }: Props) {
 
       <MicPermissionGate onResolved={setPermissionResolved} />
 
-      {/* Inline error toast for runtime speech errors (e.g. permission revoked
-          mid-session). Benign errors are already suppressed in the hook. */}
-      {voice.error ? (
-        <div
-          role="alert"
-          className="pointer-events-auto fixed bottom-24 left-1/2 z-40 w-[min(560px,calc(100%-2rem))] -translate-x-1/2 rounded-md border border-red-500/30 bg-zinc-950/95 px-4 py-3 text-xs text-red-300 shadow-lg backdrop-blur"
-        >
-          <p className="font-medium">Voice error: {voice.error.code}</p>
-          <p className="mt-1 text-zinc-400">{voice.error.message}</p>
-        </div>
+      {/* v0.4.1: friendly voice-error banner with recovery actions. Benign
+          errors (no-speech / aborted) are suppressed upstream in the hook, so
+          anything reaching here is worth surfacing. We map the raw code to
+          Thai-primary guidance + two recovery buttons. Permission-class errors
+          (not-allowed / service-not-allowed) lead with "go fix the browser/OS
+          setting" framing, since JS can't clear them — Try again only helps
+          after the user has fixed it. Gated on voice scroll mode so that
+          choosing "ใช้ Manual mode แทน" (which flips scrollMode→manual)
+          immediately dismisses the now-irrelevant voice error. */}
+      {voice.error && scrollMode === 'voice' && mode === 'view' ? (
+        (() => {
+          const p = presentSpeechError(voice.error.code);
+          return (
+            <div
+              role="alert"
+              className="pointer-events-auto fixed bottom-24 left-1/2 z-40 w-[min(560px,calc(100%-2rem))] -translate-x-1/2 rounded-lg border border-amber-500/30 bg-zinc-950/95 px-4 py-3.5 text-zinc-200 shadow-lg backdrop-blur"
+            >
+              <div className="flex gap-3">
+                <span aria-hidden className="text-lg leading-none">
+                  🎤
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-amber-200">{p.title}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                    {p.message}
+                  </p>
+                  {p.messageEn ? (
+                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                      {p.messageEn}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {/* Manual mode is the always-works escape hatch, so for
+                        permission-class errors it leads. Otherwise Try again
+                        leads. */}
+                    {p.requiresPermissionFix ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={switchToManual}
+                          className="rounded-md bg-amber-400 px-3 py-1.5 text-xs font-medium text-black transition hover:bg-amber-300"
+                        >
+                          ใช้ Manual mode แทน
+                        </button>
+                        <button
+                          type="button"
+                          onClick={retryVoice}
+                          className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-800"
+                        >
+                          ลองอีกครั้ง
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={retryVoice}
+                          className="rounded-md bg-amber-400 px-3 py-1.5 text-xs font-medium text-black transition hover:bg-amber-300"
+                        >
+                          ลองอีกครั้ง
+                        </button>
+                        <button
+                          type="button"
+                          onClick={switchToManual}
+                          className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-800"
+                        >
+                          ใช้ Manual mode แทน
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()
       ) : null}
     </div>
   );
