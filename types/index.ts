@@ -18,7 +18,19 @@ export type ScriptSettings = {
   fontSize: number; // px
   lineHeight: number;
   theme: Theme;
+  /**
+   * Horizontal mirror (scaleX(-1)) — flips left↔right. Kept under the
+   * original `mirrorMode` name (NOT renamed to mirrorH) so v0.2/v0.3
+   * persisted settings hydrate without a breaking migration.
+   */
   mirrorMode: boolean;
+  /**
+   * v0.3.1: Vertical mirror (scaleY(-1)) — flips top↔bottom, independent of
+   * mirrorMode. Some beam-splitter rigs reflect the vertical axis instead of
+   * (or in addition to) horizontal. Additive optional field — backfilled to
+   * false in the store migrate step; schemaVersion stays 1.
+   */
+  mirrorV: boolean;
   manualSpeed: number; // words per minute (used by v0.3 manual scroll mode)
   /** v0.3: 'voice' or 'manual'. Defaults to 'voice'. */
   scrollMode: ScrollMode;
@@ -45,6 +57,7 @@ export const DEFAULT_SETTINGS: ScriptSettings = {
   lineHeight: 1.6,
   theme: 'dark',
   mirrorMode: false,
-  manualSpeed: 120, // v0.3 brief: slider range 50–200 wpm, default 120
+  mirrorV: false,
+  manualSpeed: 150, // v0.3.1 brief: range 50–500 wpm, default 150 (comfortable read-aloud pace)
   scrollMode: 'voice',
 };

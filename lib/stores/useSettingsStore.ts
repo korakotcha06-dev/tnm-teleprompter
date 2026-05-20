@@ -10,6 +10,7 @@ type SettingsState = ScriptSettings & {
   setLineHeight: (n: number) => void;
   setTheme: (t: Theme) => void;
   toggleMirror: () => void;
+  toggleMirrorV: () => void;
   setManualSpeed: (n: number) => void;
   setScrollMode: (m: ScrollMode) => void;
   reset: () => void;
@@ -21,9 +22,11 @@ export const FONT_SIZE_MAX = 96;
 export const LINE_HEIGHT_MIN = 1.2;
 export const LINE_HEIGHT_MAX = 2.4;
 
-// v0.3: manual mode slider range (Touch brief)
+// v0.3.1: manual mode slider range. Touch feedback "ดูช้าไปมาก / เพิ่มสปีให้
+// ไปได้มากกว่านี้" → max raised 200 → 500 for skim/rehearsal. Floor stays 50
+// (now genuinely slow after the px/s recalibration in useManualScroll).
 export const MANUAL_SPEED_MIN = 50;
-export const MANUAL_SPEED_MAX = 200;
+export const MANUAL_SPEED_MAX = 500;
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -40,6 +43,7 @@ export const useSettingsStore = create<SettingsState>()(
         }),
       setTheme: (t) => set({ theme: t }),
       toggleMirror: () => set((s) => ({ mirrorMode: !s.mirrorMode })),
+      toggleMirrorV: () => set((s) => ({ mirrorV: !s.mirrorV })),
       setManualSpeed: (n) =>
         set({
           manualSpeed: Math.max(
@@ -52,11 +56,14 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'teleprompter.settings',
-      // Backfill scrollMode for users who persisted v0.2 settings (where
-      // the field didn't exist). Without this, hydrate returns
-      // scrollMode=undefined and the Manual toggle is dead on first load.
-      // We deliberately don't bump schemaVersion — this is an additive
-      // optional field, not a breaking change.
+      // Backfill optional fields added after v0.2 for users who persisted an
+      // older settings blob. Without this, hydrate returns those fields as
+      // undefined and the related UI is dead on first load. We deliberately
+      // DON'T bump schemaVersion — these are additive optional fields, not
+      // breaking renames:
+      //   - scrollMode (v0.3) → default 'voice'
+      //   - manualSpeed (v0.3) → re-clamped to the current 50–500 range
+      //   - mirrorV (v0.3.1) → default false (mirrorMode left untouched = H)
       migrate: (persisted: unknown) => {
         if (persisted && typeof persisted === 'object') {
           const p = persisted as Partial<ScriptSettings>;
@@ -64,6 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
             ...DEFAULT_SETTINGS,
             ...p,
             scrollMode: p.scrollMode ?? 'voice',
+            mirrorV: typeof p.mirrorV === 'boolean' ? p.mirrorV : false,
             manualSpeed:
               typeof p.manualSpeed === 'number'
                 ? Math.max(

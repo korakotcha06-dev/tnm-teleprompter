@@ -19,9 +19,10 @@
 //
 // Edit mode rules (v0.2):
 //   - Entering edit → pause voice + clear listening flag + reset cursor.
-//   - Entering edit while mirror is on → mirror auto-disables so the user
-//     can actually type (typing into a `scaleX(-1)` element is unworkable);
-//     mirror's previous value is remembered and restored on exit.
+//   - Entering edit while mirror is on → BOTH mirror axes (H and V) auto-
+//     disable so the user can actually type (typing into a `scaleX(-1)` /
+//     `scaleY(-1)` element is unworkable); each axis's previous value is
+//     remembered and restored on exit.
 //   - Voice + edit are mutually exclusive — Start button is hidden / replaced
 //     by Done in edit mode (ControlBar handles the swap).
 
@@ -51,12 +52,15 @@ export function RunController({ scriptId }: Props) {
   // Local state only — never persisted. Each /run/[id] visit starts in 'view'.
   const [mode, setMode] = useState<'view' | 'edit'>('view');
 
-  // Mirror auto-off during edit. We snapshot the user's mirror preference
-  // at edit-entry time and restore it on exit. Stored in a ref so it
-  // survives across renders without being a render-trigger.
-  const mirrorMode = useSettingsStore((s) => s.mirrorMode);
+  // Mirror auto-off during edit. We snapshot the user's mirror preferences
+  // (both axes) at edit-entry time and restore them on exit. Stored in a ref
+  // so it survives across renders without being a render-trigger. null = no
+  // active snapshot (not currently editing).
+  const mirrorMode = useSettingsStore((s) => s.mirrorMode); // horizontal
   const toggleMirror = useSettingsStore((s) => s.toggleMirror);
-  const savedMirrorRef = useRef<boolean | null>(null);
+  const mirrorV = useSettingsStore((s) => s.mirrorV); // vertical (v0.3.1)
+  const toggleMirrorV = useSettingsStore((s) => s.toggleMirrorV);
+  const savedMirrorRef = useRef<{ h: boolean; v: boolean } | null>(null);
 
   // Track whether the user has resolved the mic permission gate. Until then,
   // voice mode stays disabled so we don't try to start speech recognition
@@ -102,27 +106,28 @@ export function RunController({ scriptId }: Props) {
     // mounting the editor. restart() doubles as "cursor=0 + clear highlights
     // + isRunning=false + isListening=false" so it's the cleanest reset.
     restart();
-    // Snapshot + auto-disable mirror so typing isn't reversed.
-    if (mirrorMode) {
-      savedMirrorRef.current = true;
-      toggleMirror();
-    } else {
-      savedMirrorRef.current = false;
-    }
+    // Snapshot BOTH mirror axes, then auto-disable whichever are on so the
+    // textarea isn't flipped while typing.
+    savedMirrorRef.current = { h: mirrorMode, v: mirrorV };
+    if (mirrorMode) toggleMirror();
+    if (mirrorV) toggleMirrorV();
     setMode('edit');
-  }, [restart, mirrorMode, toggleMirror]);
+  }, [restart, mirrorMode, mirrorV, toggleMirror, toggleMirrorV]);
 
   const exitEdit = useCallback(() => {
-    // Restore mirror only if we changed it on entry. (If the user manually
-    // toggled mirror during edit — currently the UI hides the toggle, but
-    // future-proofing — we don't want to fight their choice.)
-    if (savedMirrorRef.current === true) {
-      const currentMirror = useSettingsStore.getState().mirrorMode;
-      if (!currentMirror) toggleMirror();
+    // Restore each axis only if it was ON at entry AND is currently OFF — i.e.
+    // re-enable what WE auto-disabled, without fighting any manual change the
+    // user made during edit (mirror UI is hidden in edit mode today, but this
+    // is future-proof and idempotent).
+    const saved = savedMirrorRef.current;
+    if (saved) {
+      const s = useSettingsStore.getState();
+      if (saved.h && !s.mirrorMode) toggleMirror();
+      if (saved.v && !s.mirrorV) toggleMirrorV();
     }
     savedMirrorRef.current = null;
     setMode('view');
-  }, [toggleMirror]);
+  }, [toggleMirror, toggleMirrorV]);
 
   // An empty script (token count would be 0 after re-tokenize) should not
   // allow voice Start — there's nothing to match against. We derive this

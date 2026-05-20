@@ -81,7 +81,7 @@ export function ScriptEditor({ active }: Props) {
           </button>
           {active && (
             <Link
-              href={`/run/${active.id}`}
+              href={`/run?id=${active.id}`}
               className="rounded-md border border-amber-400 px-3 py-1.5 text-xs font-medium text-amber-500 transition hover:bg-amber-400 hover:text-black"
             >
               ▶ Run

@@ -1,12 +1,13 @@
 {
   "name": "teleprompter",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3010",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:matcher": "node --test --experimental-strip-types --loader ./lib/matcher/ts-resolve.mjs"
   },
   "dependencies": {
     "next": "16.2.6",

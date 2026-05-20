@@ -50,8 +50,10 @@ export function ControlBar({
   const setFontSize = useSettingsStore((s) => s.setFontSize);
   const lineHeight = useSettingsStore((s) => s.lineHeight);
   const setLineHeight = useSettingsStore((s) => s.setLineHeight);
-  const mirrorMode = useSettingsStore((s) => s.mirrorMode);
+  const mirrorMode = useSettingsStore((s) => s.mirrorMode); // horizontal
   const toggleMirror = useSettingsStore((s) => s.toggleMirror);
+  const mirrorV = useSettingsStore((s) => s.mirrorV); // vertical (v0.3.1)
+  const toggleMirrorV = useSettingsStore((s) => s.toggleMirrorV);
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const scrollMode = useSettingsStore((s) => s.scrollMode);
@@ -300,21 +302,44 @@ export function ControlBar({
           </button>
         </div>
 
-        {/* Mirror toggle hidden in edit mode — typing into a flipped textarea
-            would be unworkable. RunController auto-saves + restores user's
-            mirror preference around the edit session. */}
+        {/* Mirror toggles hidden in edit mode — typing into a flipped textarea
+            would be unworkable. RunController auto-saves + restores BOTH the
+            user's H and V mirror preferences around the edit session.
+            v0.3.1: H (left↔right) and V (top↔bottom) are independent so the
+            user can match whatever beam-splitter rig they're shooting on. */}
         {!isEditing ? (
-          <button
-            type="button"
-            onClick={toggleMirror}
-            className={`rounded-md border px-3 py-1.5 transition ${
-              mirrorMode
-                ? 'border-amber-400 bg-amber-400/10 text-amber-300'
-                : 'border-zinc-800 hover:bg-zinc-800'
-            }`}
+          <div
+            role="group"
+            aria-label="Mirror"
+            className="inline-flex items-center overflow-hidden rounded-md border border-zinc-800"
           >
-            ⇋ Mirror
-          </button>
+            <button
+              type="button"
+              onClick={toggleMirror}
+              aria-pressed={mirrorMode}
+              title="Mirror horizontally (left ↔ right)"
+              className={`px-3 py-1.5 transition ${
+                mirrorMode
+                  ? 'bg-amber-400/10 font-medium text-amber-300'
+                  : 'text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              ⇆ H
+            </button>
+            <button
+              type="button"
+              onClick={toggleMirrorV}
+              aria-pressed={mirrorV}
+              title="Mirror vertically (top ↔ bottom)"
+              className={`border-l border-zinc-800 px-3 py-1.5 transition ${
+                mirrorV
+                  ? 'bg-amber-400/10 font-medium text-amber-300'
+                  : 'text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              ⇅ V
+            </button>
+          </div>
         ) : null}
 
         <button

@@ -64,7 +64,7 @@ export function ScriptLibrary() {
             </button>
             <div className="mt-2 flex gap-2">
               <Link
-                href={`/run/${s.id}`}
+                href={`/run?id=${s.id}`}
                 className="flex-1 rounded-md bg-amber-400 px-2 py-1 text-center text-xs font-medium text-black transition hover:bg-amber-300"
               >
                 ▶ Run

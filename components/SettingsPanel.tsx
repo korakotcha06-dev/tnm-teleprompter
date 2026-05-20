@@ -6,6 +6,8 @@ import {
   FONT_SIZE_MAX,
   LINE_HEIGHT_MIN,
   LINE_HEIGHT_MAX,
+  MANUAL_SPEED_MIN,
+  MANUAL_SPEED_MAX,
 } from '@/lib/stores/useSettingsStore';
 import type { Theme } from '@/types';
 
@@ -18,6 +20,8 @@ export function SettingsPanel() {
   const setTheme = useSettingsStore((s) => s.setTheme);
   const mirrorMode = useSettingsStore((s) => s.mirrorMode);
   const toggleMirror = useSettingsStore((s) => s.toggleMirror);
+  const mirrorV = useSettingsStore((s) => s.mirrorV);
+  const toggleMirrorV = useSettingsStore((s) => s.toggleMirrorV);
   const manualSpeed = useSettingsStore((s) => s.manualSpeed);
   const setManualSpeed = useSettingsStore((s) => s.setManualSpeed);
   const reset = useSettingsStore((s) => s.reset);
@@ -80,20 +84,48 @@ export function SettingsPanel() {
         </div>
       </Section>
 
-      <Section label="Mirror mode" hint={mirrorMode ? 'on' : 'off'}>
-        <button
-          type="button"
-          onClick={toggleMirror}
-          className={`w-full rounded-md border px-3 py-2 text-sm transition ${
-            mirrorMode
-              ? 'border-amber-400 bg-amber-400/10 text-amber-500'
-              : 'border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800'
-          }`}
-        >
-          {mirrorMode
-            ? 'On — text mirrored for reflective glass setup'
-            : 'Off — normal orientation'}
-        </button>
+      <Section
+        label="Mirror"
+        hint={
+          mirrorMode && mirrorV
+            ? 'H + V'
+            : mirrorMode
+              ? 'horizontal'
+              : mirrorV
+                ? 'vertical'
+                : 'off'
+        }
+      >
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={toggleMirror}
+            title="Flip left ↔ right"
+            className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
+              mirrorMode
+                ? 'border-amber-400 bg-amber-400/10 text-amber-500'
+                : 'border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800'
+            }`}
+          >
+            ⇆ Horizontal
+          </button>
+          <button
+            type="button"
+            onClick={toggleMirrorV}
+            title="Flip top ↔ bottom"
+            className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
+              mirrorV
+                ? 'border-amber-400 bg-amber-400/10 text-amber-500'
+                : 'border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800'
+            }`}
+          >
+            ⇅ Vertical
+          </button>
+        </div>
+        <p className="text-xs text-zinc-500">
+          Match your beam-splitter rig — some mounts reflect horizontally, some
+          vertically, some both.
+        </p>
       </Section>
 
       <Section
@@ -102,15 +134,15 @@ export function SettingsPanel() {
       >
         <input
           type="range"
-          min={30}
-          max={300}
+          min={MANUAL_SPEED_MIN}
+          max={MANUAL_SPEED_MAX}
           step={5}
           value={manualSpeed}
           onChange={(e) => setManualSpeed(Number(e.target.value))}
           className="w-full accent-amber-400"
         />
         <p className="text-xs text-zinc-500">
-          Fallback playback speed when voice-detect is off. Voice integration ships in v0.2.
+          Auto-scroll speed for Manual mode (50–500 wpm).
         </p>
       </Section>
 

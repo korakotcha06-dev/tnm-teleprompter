@@ -25,7 +25,8 @@ export function TeleprompterView({ scriptId }: Props) {
 
   const fontSize = useSettingsStore((s) => s.fontSize);
   const lineHeight = useSettingsStore((s) => s.lineHeight);
-  const mirrorMode = useSettingsStore((s) => s.mirrorMode);
+  const mirrorMode = useSettingsStore((s) => s.mirrorMode); // horizontal
+  const mirrorV = useSettingsStore((s) => s.mirrorV); // vertical (v0.3.1)
   const scrollMode = useSettingsStore((s) => s.scrollMode);
   const manualSpeed = useSettingsStore((s) => s.manualSpeed);
 
@@ -87,44 +88,70 @@ export function TeleprompterView({ scriptId }: Props) {
     );
   }
 
+  // v0.3.1 mirror — H and V are independent (beam-splitter rigs vary by mount).
+  // CRITICAL ARCHITECTURE: the mirror transform lives on an OUTER, NON-SCROLLING
+  // wrapper, while the inner element keeps `ref={wrapperRef}` and owns scrollTop.
+  //   - If scaleY(-1) were applied to the scroll container itself, the rendered
+  //     image would flip but scrollTop still advances in normal layout space →
+  //     the user perceives the text scrolling the WRONG way (sticking point of
+  //     this task). Both useManualScroll (scrollTop writes) and useAutoScroll
+  //     (scrollIntoView centering) compute in unflipped coordinates.
+  //   - By flipping the OUTER wrapper (a fixed-size, non-scrolling box that
+  //     simply contains the scroller), the optical mirror is applied to the
+  //     final composited frame — exactly what physical beam-splitter glass does
+  //     — and scroll math stays untouched. No delta inversion, no hacks.
+  // scaleX(-1) horizontal, scaleY(-1) vertical, composable simultaneously.
+  const mirrorTransform =
+    mirrorMode || mirrorV
+      ? `scaleX(${mirrorMode ? -1 : 1}) scaleY(${mirrorV ? -1 : 1})`
+      : 'none';
+
   return (
     <div className="relative">
+      {/* Outer mirror wrapper — applies the optical flip(s) to the whole
+          viewport image. Non-scrolling: h-screen + overflow-hidden so it's a
+          fixed frame. The scroll container nested inside owns scrollTop in
+          normal (unflipped) coordinates — see ARCHITECTURE note above. */}
       <div
-        ref={wrapperRef}
-        // v0.3: switched from `min-h-screen` → `h-screen` so the wrapper is
-        // a fixed-height scroll viewport. useManualScroll writes scrollTop
-        // here, which silently no-ops if the WINDOW is the actual scroller
-        // (which was the v0.2 case — min-h-screen + content grew the box
-        // and let document.documentElement.scrollTop own scrolling).
-        //
-        // scrollBehavior: 'auto' is critical — globals.css applies `smooth`
-        // to *, which would otherwise animate every rAF-frame scrollTop write
-        // and effectively cancel each previous interpolation, freezing the
-        // container at scrollTop=0. useAutoScroll passes behavior: 'smooth'
-        // explicitly via scrollIntoView, which overrides the inline auto.
-        className="h-screen w-full overflow-y-auto bg-black px-12 py-32"
-        style={{
-          fontSize: `${fontSize}px`,
-          lineHeight,
-          transform: mirrorMode ? 'scaleX(-1)' : 'none',
-          scrollBehavior: 'auto',
-        }}
+        className="h-screen w-full overflow-hidden bg-black"
+        style={{ transform: mirrorTransform }}
       >
-        <div className="mx-auto max-w-5xl font-thai font-medium">
-          {tokens.length === 0 ? (
-            <p className="text-center text-2xl text-zinc-600">
-              Start writing your script… <span className="text-zinc-700">(click ✎ Edit)</span>
-            </p>
-          ) : (
-            tokens.map((t) => (
-              <WordSpan
-                key={t.index}
-                index={t.index}
-                text={t.text}
-                isWhitespace={t.isWhitespace}
-              />
-            ))
-          )}
+        <div
+          ref={wrapperRef}
+          // v0.3: switched from `min-h-screen` → `h-screen` so the wrapper is
+          // a fixed-height scroll viewport. useManualScroll writes scrollTop
+          // here, which silently no-ops if the WINDOW is the actual scroller
+          // (which was the v0.2 case — min-h-screen + content grew the box
+          // and let document.documentElement.scrollTop own scrolling).
+          //
+          // scrollBehavior: 'auto' is critical — globals.css applies `smooth`
+          // to *, which would otherwise animate every rAF-frame scrollTop write
+          // and effectively cancel each previous interpolation, freezing the
+          // container at scrollTop=0. useAutoScroll passes behavior: 'smooth'
+          // explicitly via scrollIntoView, which overrides the inline auto.
+          className="h-full w-full overflow-y-auto px-12 py-32"
+          style={{
+            fontSize: `${fontSize}px`,
+            lineHeight,
+            scrollBehavior: 'auto',
+          }}
+        >
+          <div className="mx-auto max-w-5xl font-thai font-medium">
+            {tokens.length === 0 ? (
+              <p className="text-center text-2xl text-zinc-600">
+                Start writing your script… <span className="text-zinc-700">(click ✎ Edit)</span>
+              </p>
+            ) : (
+              tokens.map((t) => (
+                <WordSpan
+                  key={t.index}
+                  index={t.index}
+                  text={t.text}
+                  isWhitespace={t.isWhitespace}
+                />
+              ))
+            )}
+          </div>
         </div>
       </div>
 
