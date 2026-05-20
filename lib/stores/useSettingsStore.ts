@@ -13,6 +13,7 @@ type SettingsState = ScriptSettings & {
   toggleMirrorV: () => void;
   setManualSpeed: (n: number) => void;
   setScrollMode: (m: ScrollMode) => void;
+  setSidePadding: (n: number) => void;
   reset: () => void;
 };
 
@@ -27,6 +28,14 @@ export const LINE_HEIGHT_MAX = 2.4;
 // (now genuinely slow after the px/s recalibration in useManualScroll).
 export const MANUAL_SPEED_MIN = 50;
 export const MANUAL_SPEED_MAX = 500;
+
+// v0.5.1: side gutter, % of viewport width PER SIDE. Touch report "ข้อความชิด
+// ขอบซ้าย-ขวาเกินไป" on prod (the design's flex-center of width:90% was lost in
+// the real globals.css, so the 10% gutter collapsed and text hugged the edge).
+// Padding-based now (0 = full-bleed, 20% = very narrow column). Step ±2%.
+export const SIDE_PADDING_MIN = 0;
+export const SIDE_PADDING_MAX = 20;
+export const SIDE_PADDING_STEP = 2;
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -52,6 +61,13 @@ export const useSettingsStore = create<SettingsState>()(
           ),
         }),
       setScrollMode: (m) => set({ scrollMode: m }),
+      setSidePadding: (n) =>
+        set({
+          sidePadding: Math.max(
+            SIDE_PADDING_MIN,
+            Math.min(SIDE_PADDING_MAX, Math.round(n))
+          ),
+        }),
       reset: () => set(DEFAULT_SETTINGS),
     }),
     {
@@ -64,6 +80,7 @@ export const useSettingsStore = create<SettingsState>()(
       //   - scrollMode (v0.3) → default 'voice'
       //   - manualSpeed (v0.3) → re-clamped to the current 50–500 range
       //   - mirrorV (v0.3.1) → default false (mirrorMode left untouched = H)
+      //   - sidePadding (v0.5.1) → default 6%, re-clamped to the 0–20 range
       migrate: (persisted: unknown) => {
         if (persisted && typeof persisted === 'object') {
           const p = persisted as Partial<ScriptSettings>;
@@ -79,6 +96,13 @@ export const useSettingsStore = create<SettingsState>()(
                     Math.min(MANUAL_SPEED_MAX, p.manualSpeed)
                   )
                 : DEFAULT_SETTINGS.manualSpeed,
+            sidePadding:
+              typeof p.sidePadding === 'number'
+                ? Math.max(
+                    SIDE_PADDING_MIN,
+                    Math.min(SIDE_PADDING_MAX, p.sidePadding)
+                  )
+                : DEFAULT_SETTINGS.sidePadding,
           };
         }
         return DEFAULT_SETTINGS;

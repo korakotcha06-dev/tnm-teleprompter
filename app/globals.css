@@ -563,22 +563,43 @@ html {
 /* run text + 4-state highlight grammar (maps WordSpan states onto .w classes).
    pending / read / skipped / current. cur slab: warm-dark #2A1F00 + amber text;
    light variant flips to amber slab + black text. */
-.run-text { font-family: var(--font-thai); font-weight: 500; }
-.run-text .w { transition: color .15s; }
-.run-text .w.read { color: var(--text); }
-.run-text .w.pending { color: #F5F1E84d; }
-.run-text .w.skipped { color: var(--text-dim); font-style: normal; }
+/* v0.5.2: single-color reading grammar — all words stay WHITE (no per-state
+   color changes, which felt visually busy). Only the current word gets a
+   FAINT highlight so the eye tracks position without bouncing/glare. */
+.run-text {
+  font-family: var(--font-thai);
+  font-weight: 500;
+  color: #F5F1E8;
+  /* Match the <textarea> line-breaking EXACTLY so edit ↔ run wrap identically:
+     - pre-wrap     : preserve hard newlines (Enter) + soft-wrap
+     - keep-all     : break only at real spaces (don't break inside Thai runs),
+                      same deterministic rule the editor uses → identical breaks
+     - break-word   : emergency break for an over-long unspaced run (same width
+                      ⇒ same break point in both views) */
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.run-text .w { transition: background-color .2s ease; color: #F5F1E8; }
+.run-text .w.pending,
+.run-text .w.read,
+.run-text .w.skipped { color: #F5F1E8; }
 .run-text .w.cur {
-  background: #2A1F00;
-  color: var(--tnm-amber);
+  background: rgba(255, 180, 0, 0.16);
+  color: #F5F1E8;
+  /* padding gives the highlight breathing room; the matching negative margin
+     cancels the box-width change so surrounding text never reflows/jumps as
+     the highlight moves word-to-word. */
   padding: 0 6px;
+  margin: 0 -6px;
   border-radius: 4px;
 }
-.run-stage.light .run-text { color: #2A2722; }
-.run-stage.light .run-text .w.read { color: #0A0907; }
-.run-stage.light .run-text .w.pending { color: #2A27224d; }
-.run-stage.light .run-text .w.skipped { color: #6b6453; }
-.run-stage.light .run-text .w.cur { background: var(--tnm-amber); color: #000; }
+.run-stage.light .run-text,
+.run-stage.light .run-text .w,
+.run-stage.light .run-text .w.pending,
+.run-stage.light .run-text .w.read,
+.run-stage.light .run-text .w.skipped { color: #2A2722; }
+.run-stage.light .run-text .w.cur { background: rgba(255, 180, 0, 0.3); color: #2A2722; }
 
 .run-bar {
   position: relative;

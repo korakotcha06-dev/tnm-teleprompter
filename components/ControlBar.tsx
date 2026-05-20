@@ -5,6 +5,7 @@ import { useScriptStore } from '@/lib/stores/useScriptStore';
 import {
   MANUAL_SPEED_MAX,
   MANUAL_SPEED_MIN,
+  SIDE_PADDING_STEP,
   useSettingsStore,
 } from '@/lib/stores/useSettingsStore';
 
@@ -60,6 +61,8 @@ export function ControlBar({
   const setScrollMode = useSettingsStore((s) => s.setScrollMode);
   const manualSpeed = useSettingsStore((s) => s.manualSpeed);
   const setManualSpeed = useSettingsStore((s) => s.setManualSpeed);
+  const sidePadding = useSettingsStore((s) => s.sidePadding); // v0.5.1
+  const setSidePadding = useSettingsStore((s) => s.setSidePadding);
 
   const isEditing = mode === 'edit';
   const isManual = scrollMode === 'manual';
@@ -233,6 +236,38 @@ export function ControlBar({
           onClick={() =>
             setLineHeight(useSettingsStore.getState().lineHeight + 0.1)
           }
+        >
+          +
+        </button>
+      </div>
+
+      {/* v0.5.1 side-padding stepper — left/right gutter as % of viewport.
+          Fixes "ข้อความชิดขอบ" on prod. Live-state read (getState) mirrors the
+          font/line steppers so rapid clicks never act on a stale closure. */}
+      <div className="rb-stepper">
+        <span className="lbl" title="Side padding (left/right gutter)">
+          ⇿
+        </span>
+        <button
+          type="button"
+          onClick={() =>
+            setSidePadding(
+              useSettingsStore.getState().sidePadding - SIDE_PADDING_STEP
+            )
+          }
+          title="Less side padding (text wider)"
+        >
+          −
+        </button>
+        <span className="val tabular-nums">{sidePadding}%</span>
+        <button
+          type="button"
+          onClick={() =>
+            setSidePadding(
+              useSettingsStore.getState().sidePadding + SIDE_PADDING_STEP
+            )
+          }
+          title="More side padding (text narrower)"
         >
           +
         </button>

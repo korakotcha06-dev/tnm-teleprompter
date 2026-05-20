@@ -29,6 +29,7 @@ export function TeleprompterView({ scriptId }: Props) {
   const mirrorV = useSettingsStore((s) => s.mirrorV); // vertical (v0.3.1)
   const scrollMode = useSettingsStore((s) => s.scrollMode);
   const manualSpeed = useSettingsStore((s) => s.manualSpeed);
+  const sidePadding = useSettingsStore((s) => s.sidePadding); // % per side (v0.5.1)
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -43,11 +44,12 @@ export function TeleprompterView({ scriptId }: Props) {
     if (script) setTokensFromContent(script.content, script.language);
   }, [script, setTokensFromContent]);
 
-  // Voice mode auto-scroll: keep the most-recently-matched word centered.
-  // We pass `cursor - 1` because cursor points AT the next-to-read word —
-  // the visually-active word is one back. cursor=0 → activeIdx=-1 → no-op.
+  // Voice mode auto-scroll: keep the word the reader is ABOUT TO read on the
+  // focal line. We pass `cursor` (the next-to-read word, which is also the one
+  // WordSpan paints as `.cur`) — NOT cursor-1 — so the reading guide line sits
+  // on the word being read now, not on text already spoken.
   const voiceAutoScrollEnabled = scrollMode === 'voice' && isRunning;
-  useAutoScroll(Math.max(cursor - 1, 0), wrapperRef, {
+  useAutoScroll(cursor, wrapperRef, {
     enabled: voiceAutoScrollEnabled,
   });
 
@@ -120,12 +122,25 @@ export function TeleprompterView({ scriptId }: Props) {
           // and freeze the container at scrollTop=0. useAutoScroll passes
           // behavior: 'smooth' explicitly via scrollIntoView, overriding this.
           className="run-text"
+          // v0.5.1 side padding: the design centered a width:90% column via
+          // .run-scroll flex, but that flex rule never made it into the real
+          // globals.css — so text hugged the left edge on prod. We now drive
+          // the gutter explicitly with left/right padding (% of viewport) on
+          // this inner scroller, keeping width:100% + border-box. maxWidth caps
+          // the line length on wide monitors; margin:auto re-centers the capped
+          // column. Padding lives here (inner, scrolling) — NOT on the outer
+          // mirror wrapper — so scaleX/scaleY and scrollTop math are untouched.
           style={{
             height: '100%',
-            width: '90%',
+            width: '100%',
             maxWidth: 1500,
+            margin: '0 auto',
+            boxSizing: 'border-box',
             overflowY: 'auto',
-            padding: '30vh 0 80vh',
+            paddingTop: '30vh',
+            paddingBottom: '80vh',
+            paddingLeft: `${sidePadding}vw`,
+            paddingRight: `${sidePadding}vw`,
             fontSize: `${fontSize}px`,
             lineHeight,
             scrollBehavior: 'auto',
@@ -149,32 +164,34 @@ export function TeleprompterView({ scriptId }: Props) {
         </div>
       </div>
 
-      {/* v0.3 Manual mode reading guide — faint horizontal line at the vertical
-          center. Lives OUTSIDE the mirrored container so the guide isn't
-          flipped. Pointer-events:none so it never intercepts word clicks. */}
-      {scrollMode === 'manual' ? (
+      {/* Reading guide — faint horizontal "leading line" at the vertical center
+          (the focal point auto-scroll keeps the active word on). Shown in BOTH
+          voice + manual modes (v0.5.2) to help the reader track the focal line.
+          Lives OUTSIDE the mirrored container so it isn't flipped;
+          pointer-events:none so it never intercepts word clicks. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          top: '50%',
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      >
         <div
-          aria-hidden
+          // Match the text gutter (v0.5.1): span the viewport minus the same
+          // sidePadding% on each side, capped to the text column maxWidth.
           style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            top: '50%',
-            zIndex: 1,
-            pointerEvents: 'none',
+            margin: '0 auto',
+            height: 1,
+            maxWidth: 1500,
+            width: `calc(100% - ${sidePadding * 2}vw)`,
+            background: 'rgba(255, 180, 0, 0.18)',
           }}
-        >
-          <div
-            style={{
-              margin: '0 auto',
-              height: 1,
-              maxWidth: 1500,
-              width: '90%',
-              background: 'var(--tnm-amber-line)',
-            }}
-          />
-        </div>
-      ) : null}
+        />
+      </div>
     </>
   );
 }

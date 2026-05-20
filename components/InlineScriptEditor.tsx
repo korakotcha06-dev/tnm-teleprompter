@@ -46,6 +46,7 @@ export function InlineScriptEditor({ script, onExit }: Props) {
 
   const fontSize = useSettingsStore((s) => s.fontSize);
   const lineHeight = useSettingsStore((s) => s.lineHeight);
+  const sidePadding = useSettingsStore((s) => s.sidePadding); // match run-view gutter
 
   // Local mirror of the persisted script content/title. Initialized once
   // from props — re-mount happens whenever scriptId changes upstream, so
@@ -173,9 +174,23 @@ export function InlineScriptEditor({ script, onExit }: Props) {
     // applies here too) instead of forcing a black full-screen box.
     <div
       className="run-scroll"
-      style={{ overflowY: 'auto', display: 'block', padding: '12vh 36px 30vh' }}
+      style={{ overflowY: 'auto', display: 'block', padding: '12vh 0 30vh' }}
     >
-      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      {/* v0.5.2: mirror TeleprompterView's run-text column EXACTLY (width:100%
+          + maxWidth:1500 + margin:auto + sidePadding vw) so line wrapping while
+          editing matches the run view — editing a line break no longer shifts
+          where text wraps once you hit Run. */}
+      <div
+        className="flex flex-col gap-6"
+        style={{
+          width: '100%',
+          maxWidth: 1500,
+          margin: '0 auto',
+          boxSizing: 'border-box',
+          paddingLeft: `${sidePadding}vw`,
+          paddingRight: `${sidePadding}vw`,
+        }}
+      >
         {/* Title input — slim, no heavy border. Subtle underline only when
             focused, matching the luxury minimal tone. */}
         <input
@@ -211,10 +226,14 @@ export function InlineScriptEditor({ script, onExit }: Props) {
           style={{
             fontSize: `${fontSize}px`,
             lineHeight,
-            // Inset padding mimics the teleprompter view's max-w-5xl content
-            // box so left edge of text aligns identically across modes.
             padding: '0.25rem 0',
             minHeight: '40vh',
+            // Match run-text line-breaking exactly (see globals .run-text):
+            // keep-all + break-word so the textarea wraps at the same points
+            // as the teleprompter view (same width + font already enforced).
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'keep-all',
+            overflowWrap: 'break-word',
           }}
         />
       </div>

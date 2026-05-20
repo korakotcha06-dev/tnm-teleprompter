@@ -34,6 +34,15 @@ export type ScriptSettings = {
   manualSpeed: number; // words per minute (used by v0.3 manual scroll mode)
   /** v0.3: 'voice' or 'manual'. Defaults to 'voice'. */
   scrollMode: ScrollMode;
+  /**
+   * v0.5.1: horizontal gutter on each side of the run text, expressed as a
+   * percentage of the viewport width (so it scales responsively across phone/
+   * tablet/external monitor). Applied as left+right padding on the inner
+   * scrolling .run-text content — NOT on the outer mirror wrapper — so it never
+   * touches scaleX/scaleY or scrollTop math. Additive optional field,
+   * backfilled to the default in the store migrate step; schemaVersion stays 1.
+   */
+  sidePadding: number; // % of viewport width per side
 };
 
 export type Script = {
@@ -60,4 +69,5 @@ export const DEFAULT_SETTINGS: ScriptSettings = {
   mirrorV: false,
   manualSpeed: 150, // v0.3.1 brief: range 50–500 wpm, default 150 (comfortable read-aloud pace)
   scrollMode: 'voice',
+  sidePadding: 6, // v0.5.1: 6% per side ≈ the design's old 90%-width gutter, comfortable edge buffer
 };
