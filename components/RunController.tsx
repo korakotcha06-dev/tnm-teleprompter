@@ -5,8 +5,9 @@
 // Owns the lifecycle of:
 //   - MicPermissionGate (one-time onboarding modal per browser)
 //   - useVoiceMode (SpeechEngine + word matcher driven by store.isRunning)
-//   - ControlBar (start/pause/restart, status indicator, edit toggle)
-//   - View / Edit mode toggle (v0.2: inline cueprompter-style editing)
+//   - ControlBar (start/pause/restart, status indicator)
+//   - The idle⇄running surface swap (editable text when idle, teleprompter
+//     while running)
 //
 // The page itself stays a thin server component that resolves the route
 // param and mounts this controller. All client behavior lives here.
@@ -17,14 +18,13 @@
 //   That keeps SSR boundaries clean and lets us refactor route layout later
 //   without touching the controller.
 //
-// Edit mode rules (v0.2):
-//   - Entering edit → pause voice + clear listening flag + reset cursor.
-//   - Entering edit while mirror is on → BOTH mirror axes (H and V) auto-
-//     disable so the user can actually type (typing into a `scaleX(-1)` /
-//     `scaleY(-1)` element is unworkable); each axis's previous value is
-//     remembered and restored on exit.
-//   - Voice + edit are mutually exclusive — Start button is hidden / replaced
-//     by Done in edit mode (ControlBar handles the swap).
+// Edit-while-idle (v0.6): there is no explicit "edit mode" to toggle into.
+//   - Not running → InlineScriptEditor is mounted: the script body is directly
+//     editable and auto-saves (debounced) to localStorage. Just type.
+//   - Start → tokenizes the latest text + runs (voice highlight or WPM scroll).
+//   - Pause / Restart → drops back to the editable surface.
+//   - Mirror (H/V) only flips the RUNNING teleprompter; the editor is always
+//     rendered unflipped, so no snapshot/restore of mirror prefs is needed.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
@@ -50,20 +50,17 @@ export function RunController({ scriptId }: Props) {
   const restart = useScriptStore((s) => s.restart);
   const start = useScriptStore((s) => s.start);
 
-  // v0.2: mode toggle. 'view' = teleprompter render + voice eligible.
-  //                    'edit' = InlineScriptEditor mounted, voice paused.
-  // Local state only — never persisted. Each /run/[id] visit starts in 'view'.
-  const [mode, setMode] = useState<'view' | 'edit'>('view');
+  // v0.6: editing is no longer a separate "mode" you toggle into. Whenever the
+  // teleprompter is NOT running, the script body is directly editable (inline
+  // textarea, auto-saving). Pressing Start tokenizes the latest text and runs;
+  // pausing/restarting drops back to the editable surface. This removes the
+  // old view⇄edit toggle ("no bouncing") — you just type, then run.
+  const isRunning = useScriptStore((s) => s.isRunning);
 
-  // Mirror auto-off during edit. We snapshot the user's mirror preferences
-  // (both axes) at edit-entry time and restore them on exit. Stored in a ref
-  // so it survives across renders without being a render-trigger. null = no
-  // active snapshot (not currently editing).
-  const mirrorMode = useSettingsStore((s) => s.mirrorMode); // horizontal
-  const toggleMirror = useSettingsStore((s) => s.toggleMirror);
-  const mirrorV = useSettingsStore((s) => s.mirrorV); // vertical (v0.3.1)
-  const toggleMirrorV = useSettingsStore((s) => s.toggleMirrorV);
-  const savedMirrorRef = useRef<{ h: boolean; v: boolean } | null>(null);
+  // Mirror preferences only ever apply to the RUNNING teleprompter view — the
+  // editable surface is always rendered unflipped (you can't type into mirrored
+  // text). So no snapshot/restore dance is needed: toggling H/V just stores the
+  // preference, and it takes visible effect once you Start.
 
   // Track whether the user has resolved the mic permission gate. Until then,
   // voice mode stays disabled so we don't try to start speech recognition
@@ -90,13 +87,13 @@ export function RunController({ scriptId }: Props) {
   // so the run view re-colors (text + cur slab + bar) without touching logic.
   const theme = useSettingsStore((s) => s.theme);
 
-  // Voice mode only enabled when permission is granted AND we're in view
-  // mode AND the user picked the voice scroll mode. useVoiceMode handles
-  // the stop side via its isRunning watcher — we just need to ensure
-  // isRunning flips to false when entering edit (done in `enterEdit` below)
-  // and ensure voice doesn't fire when manual mode owns playback.
+  // Voice mode only enabled when permission is granted AND the user picked the
+  // voice scroll mode. useVoiceMode arms/disarms the SpeechEngine off the
+  // store's `isRunning` flag, so the mic only opens after Start — while the
+  // editable (not-running) surface is up, isRunning is false and voice stays
+  // dormant on its own.
   const voiceEnabled =
-    permissionResolved === 'granted' && mode === 'view' && scrollMode === 'voice';
+    permissionResolved === 'granted' && scrollMode === 'voice';
 
   const voice = useVoiceMode({ language, enabled: voiceEnabled });
 
@@ -123,34 +120,6 @@ export function RunController({ scriptId }: Props) {
       if (useScriptStore.getState().isRunning) pause();
     }
   }, [permissionResolved, pause]);
-
-  const enterEdit = useCallback(() => {
-    // Mutually exclusive with voice: pause + clear playback state before
-    // mounting the editor. restart() doubles as "cursor=0 + clear highlights
-    // + isRunning=false + isListening=false" so it's the cleanest reset.
-    restart();
-    // Snapshot BOTH mirror axes, then auto-disable whichever are on so the
-    // textarea isn't flipped while typing.
-    savedMirrorRef.current = { h: mirrorMode, v: mirrorV };
-    if (mirrorMode) toggleMirror();
-    if (mirrorV) toggleMirrorV();
-    setMode('edit');
-  }, [restart, mirrorMode, mirrorV, toggleMirror, toggleMirrorV]);
-
-  const exitEdit = useCallback(() => {
-    // Restore each axis only if it was ON at entry AND is currently OFF — i.e.
-    // re-enable what WE auto-disabled, without fighting any manual change the
-    // user made during edit (mirror UI is hidden in edit mode today, but this
-    // is future-proof and idempotent).
-    const saved = savedMirrorRef.current;
-    if (saved) {
-      const s = useSettingsStore.getState();
-      if (saved.h && !s.mirrorMode) toggleMirror();
-      if (saved.v && !s.mirrorV) toggleMirrorV();
-    }
-    savedMirrorRef.current = null;
-    setMode('view');
-  }, [toggleMirror, toggleMirrorV]);
 
   // v0.4.2 voice-error recovery — THE LOOP FIX.
   //
@@ -188,7 +157,6 @@ export function RunController({ scriptId }: Props) {
       micPermission.state === 'granted' &&
       voice.error &&
       scrollMode === 'voice' &&
-      mode === 'view' &&
       !healArmedRef.current
     ) {
       healArmedRef.current = true;
@@ -198,7 +166,7 @@ export function RunController({ scriptId }: Props) {
     // Re-arm the one-shot guard once the error is gone, so a *future* external
     // re-deny → re-grant cycle can heal again.
     if (!voice.error) healArmedRef.current = false;
-  }, [micPermission.state, voice.error, scrollMode, mode, restart, start]);
+  }, [micPermission.state, voice.error, scrollMode, restart, start]);
 
   // switchToManual → stop voice, flip scroll mode. The user then presses Start
   // (now a WPM auto-scroll) from the ControlBar. Reuses the same store action
@@ -214,6 +182,12 @@ export function RunController({ scriptId }: Props) {
   // store's tokens array being populated yet.
   const hasContent = (script?.content?.trim().length ?? 0) > 0;
 
+  // Editing IS the idle state: whenever we're not running and the script
+  // exists, show the directly-editable surface. While running, show the
+  // tokenized teleprompter (highlight + auto-scroll). The two surfaces share
+  // the same column geometry so Start/Pause doesn't visually jump.
+  const showEditor = !isRunning && !!script;
+
   return (
     <div className={`run-stage ${theme === 'light' ? 'light' : ''}`}>
       {/* Subtle brand watermark, top-left. Decorative only. */}
@@ -222,19 +196,13 @@ export function RunController({ scriptId }: Props) {
         <span className="lab">Touchnewmedia · Teleprompter</span>
       </div>
 
-      {mode === 'edit' && script ? (
-        <InlineScriptEditor script={script} onExit={exitEdit} />
+      {showEditor && script ? (
+        <InlineScriptEditor script={script} />
       ) : (
         <TeleprompterView scriptId={scriptId} />
       )}
 
-      <ControlBar
-        voiceEnabled={voiceEnabled}
-        mode={mode}
-        onEnterEdit={enterEdit}
-        onExitEdit={exitEdit}
-        canStartVoice={hasContent && mode === 'view'}
-      />
+      <ControlBar voiceEnabled={voiceEnabled} canStartVoice={hasContent} />
 
       <MicPermissionGate onResolved={setPermissionResolved} />
 
@@ -247,7 +215,7 @@ export function RunController({ scriptId }: Props) {
           after the user has fixed it. Gated on voice scroll mode so that
           choosing "ใช้ Manual mode แทน" (which flips scrollMode→manual)
           immediately dismisses the now-irrelevant voice error. */}
-      {voice.error && scrollMode === 'voice' && mode === 'view' ? (
+      {voice.error && scrollMode === 'voice' ? (
         (() => {
           const p = presentSpeechError(voice.error.code);
           return (
