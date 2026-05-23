@@ -13,6 +13,10 @@ export const BRAND = {
   lineId: 'tib7057v',
   quoteHref: 'https://line.me/ti/p/~tib7057v', // "Get a quote" → LINE
   showreelHref: 'https://vimeo.com/thetnm', // "View showreel" → Vimeo
+  /** External link to Touchnewmedia company site (rendered in SiteNav). */
+  siteHref: 'https://thetnm.com',
+  /** Visible label for the company-site link in SiteNav. */
+  siteLabel: 'thetnm.com',
   /** Brand build label shown in the nav pill + hero meta. Touch-approved. */
-  versionLabel: 'v0.5 · Voice',
+  versionLabel: 'v0.5.3 · Auto-save',
 } as const;

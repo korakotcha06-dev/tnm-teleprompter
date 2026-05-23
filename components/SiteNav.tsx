@@ -20,6 +20,15 @@ export function SiteNav() {
           <span className="dot" />
           {BRAND.versionLabel}
         </span>
+        <a
+          className="icon-btn"
+          href={BRAND.siteHref}
+          target="_blank"
+          rel="noopener"
+          title="Visit Touchnewmedia"
+        >
+          {BRAND.siteLabel} →
+        </a>
         <Link className="icon-btn" href="/settings" title="Settings">
           <svg
             width="14"
