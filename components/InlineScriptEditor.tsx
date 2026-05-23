@@ -26,7 +26,7 @@
 //   actually runs — at Start, this editor unmounts and flushes the latest
 //   content, then TeleprompterView's effect re-tokenizes from the new content.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
 import { useSettingsStore } from '@/lib/stores/useSettingsStore';
 import type { Script } from '@/types';
@@ -52,6 +52,93 @@ export function InlineScriptEditor({ script }: Props) {
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // BUG FIX #2 — anti-scroll-jump-on-keystroke.
+  //
+  // Problem: the textarea is auto-grown to its full content height and lives
+  // inside `.run-text` (overflow-y: auto). When the user types ANYWHERE in
+  // the document, the browser's native "scroll caret into view" walks up the
+  // DOM, finds `.run-text` as the nearest scrollable ancestor, and snaps its
+  // scrollTop to the caret position. For a long script (>1 viewport) and a
+  // caret near the end, this manifests as the view "เด้งลงมาอยู่ล่างสุด" —
+  // the viewport teleports to the bottom of the document on every keystroke.
+  //
+  // Why a simple "save in onBeforeInput, restore in useLayoutEffect" isn't
+  // enough: empirical instrumentation shows the browser's caret-into-view
+  // scroll runs AFTER React's commit phase and AFTER useLayoutEffect — it
+  // sits between `input` and `keyup`, in a microtask/rAF the browser owns.
+  // Restoring scrollTop in useLayoutEffect happens too early; the browser
+  // simply re-scrolls right after.
+  //
+  // Fix that actually works: capture scrollTop on keydown/beforeinput. While
+  // we're "anchored" (set by keystroke, cleared by user action), install a
+  // scroll listener on `.run-text` that immediately reverts any programmatic
+  // scroll the browser tries to make. Manual user scroll (wheel, scrollbar
+  // drag, PageDown) clears the anchor so the user retains real control.
+  //
+  // Anchor lifecycle:
+  //   - SET on keydown / beforeinput (every keystroke).
+  //   - HELD through the input/render cycle and one rAF afterward (long
+  //     enough to absorb the browser's caret-into-view scroll).
+  //   - CLEARED on wheel, touchstart, scrollbar mousedown, or after the
+  //     rAF window expires.
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const anchoredScrollTopRef = useRef<number | null>(null);
+  const anchorClearTimerRef = useRef<number | null>(null);
+
+  // Capture scrollTop and start a brief "guard window" during which any
+  // programmatic scroll on the container is reverted.
+  const captureScrollTop = useCallback(() => {
+    const sc = scrollContainerRef.current;
+    if (!sc) return;
+    anchoredScrollTopRef.current = sc.scrollTop;
+    // Refresh the clear timer — the guard lives ~2 rAFs after the last
+    // keystroke. Long enough to catch the browser's deferred scroll;
+    // short enough that intentional user scroll right after typing still
+    // works.
+    if (anchorClearTimerRef.current !== null) {
+      cancelAnimationFrame(anchorClearTimerRef.current);
+    }
+    const id1 = requestAnimationFrame(() => {
+      const id2 = requestAnimationFrame(() => {
+        anchoredScrollTopRef.current = null;
+        anchorClearTimerRef.current = null;
+      });
+      anchorClearTimerRef.current = id2;
+    });
+    anchorClearTimerRef.current = id1;
+  }, []);
+
+  // Scroll-guard: if the browser tries to scroll while we're anchored,
+  // revert it. Mounted once on the scroll container via effect (we need
+  // a real DOM listener, not a React synthetic one — React doesn't fire
+  // onScroll for programmatic scrolls in all cases, and we need passive
+  // listener semantics anyway).
+  useEffect(() => {
+    const sc = scrollContainerRef.current;
+    if (!sc) return;
+    const onScroll = () => {
+      const anchor = anchoredScrollTopRef.current;
+      if (anchor !== null && Math.abs(sc.scrollTop - anchor) > 0.5) {
+        sc.scrollTop = anchor;
+      }
+    };
+    // User intent signals — these CLEAR the anchor so the user can scroll
+    // away on purpose without the guard fighting them.
+    const releaseAnchor = () => {
+      anchoredScrollTopRef.current = null;
+    };
+    sc.addEventListener('scroll', onScroll, { passive: true });
+    sc.addEventListener('wheel', releaseAnchor, { passive: true });
+    sc.addEventListener('touchstart', releaseAnchor, { passive: true });
+    sc.addEventListener('mousedown', releaseAnchor, { passive: true });
+    return () => {
+      sc.removeEventListener('scroll', onScroll);
+      sc.removeEventListener('wheel', releaseAnchor);
+      sc.removeEventListener('touchstart', releaseAnchor);
+      sc.removeEventListener('mousedown', releaseAnchor);
+    };
+  }, []);
 
   // Latest-values ref — read by the unmount cleanup so we can synchronously
   // flush the pending debounced save with whatever the user last typed. Keeps
@@ -123,19 +210,57 @@ export function InlineScriptEditor({ script }: Props) {
   // continuous block (the inner run-text column owns the scrollbar, exactly
   // like the teleprompter view). Computed via a layout ref callback to avoid
   // measure-then-write thrash.
-  const handleTextareaResize = useCallback((el: HTMLTextAreaElement | null) => {
-    textareaRef.current = el;
-    if (!el) return;
+  //
+  // The `height = 'auto'` step momentarily collapses the textarea, which
+  // would otherwise cause `.run-text` to clamp its scrollTop (since total
+  // scrollHeight briefly shrinks). We snapshot + restore the parent's
+  // scrollTop across the resize to keep the view exactly where it was.
+  const resizeTextareaPreservingScroll = useCallback((el: HTMLTextAreaElement) => {
+    const sc = scrollContainerRef.current;
+    const savedScrollTop = sc?.scrollTop ?? null;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
+    if (sc && savedScrollTop !== null) sc.scrollTop = savedScrollTop;
   }, []);
 
-  useEffect(() => {
+  const handleTextareaResize = useCallback(
+    (el: HTMLTextAreaElement | null) => {
+      textareaRef.current = el;
+      if (!el) return;
+      resizeTextareaPreservingScroll(el);
+    },
+    [resizeTextareaPreservingScroll]
+  );
+
+  // Resize the textarea to fit its content. Run as useLayoutEffect so the
+  // size update is committed before paint (no flash of clipped content).
+  // Snapshot+restore the parent scrollTop across the resize: setting height
+  // to 'auto' momentarily collapses the textarea and would otherwise cause
+  // `.run-text` to clamp its scrollTop. The scroll-guard above handles the
+  // OTHER source of jumps (browser caret-into-view) — between the two, no
+  // keystroke can move the viewport.
+  useLayoutEffect(() => {
     const el = textareaRef.current;
+    const sc = scrollContainerRef.current;
     if (!el) return;
+    const savedScrollTop = sc?.scrollTop ?? null;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
+    if (sc && savedScrollTop !== null) {
+      const maxScroll = sc.scrollHeight - sc.clientHeight;
+      sc.scrollTop = Math.max(0, Math.min(savedScrollTop, maxScroll));
+    }
   }, [content, fontSize, lineHeight]);
+
+  // Cancel any pending anchor-clear rAF on unmount.
+  useEffect(() => {
+    return () => {
+      if (anchorClearTimerRef.current !== null) {
+        cancelAnimationFrame(anchorClearTimerRef.current);
+        anchorClearTimerRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <>
@@ -176,6 +301,7 @@ export function InlineScriptEditor({ script }: Props) {
           and line-breaking. The editor is never mirrored, so no transform. */}
       <div className="run-scroll" style={{ overflow: 'hidden' }}>
         <div
+          ref={scrollContainerRef}
           className="run-text"
           style={{
             height: '100%',
@@ -191,12 +317,18 @@ export function InlineScriptEditor({ script }: Props) {
             fontSize: `${fontSize}px`,
             lineHeight,
             scrollBehavior: 'auto',
+            // Belt-and-braces: tell the browser not to anchor scroll on the
+            // textarea's content shifts. (Layout-effect restore is the
+            // primary guard; this prevents subtle browser-anchor jitter.)
+            overflowAnchor: 'none',
           }}
         >
           <textarea
             ref={handleTextareaResize}
             value={content}
             onChange={(e) => handleContentChange(e.target.value)}
+            onBeforeInput={captureScrollTop}
+            onKeyDown={captureScrollTop}
             placeholder="Start writing your script…"
             aria-label="Script content"
             spellCheck={false}
