@@ -142,13 +142,27 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
 
   setTokensFromContent: (content, language) => {
     const tokens = tokenize(content, language);
+    // v0.6 regression fix — DO NOT touch isRunning / isListening here.
+    //
+    // In the old view/edit world, TeleprompterView was always mounted and this
+    // effect only ran when the user manually exited the editor — resetting
+    // isRunning was a defensive "stop playback when content changes" guard.
+    //
+    // In v0.6, TeleprompterView mounts only AFTER the user presses Start
+    // (RunController swaps surfaces on `isRunning`). The tokenize-on-mount
+    // effect now fires immediately after Start → if we set isRunning: false
+    // here we instantly undo the very click that just mounted us, causing
+    // RunController to swap back to the editor. The user sees "Start does
+    // nothing" — Touch's bug.
+    //
+    // Resetting cursor/highlights on fresh content is still correct (a new
+    // token array has no meaningful cursor history). Playback flags are owned
+    // by ControlBar / restart() / pause() — we leave them alone.
     set({
       tokens,
       cursor: 0,
       highlightedIndices: new Set<number>(),
       skippedIndices: new Set<number>(),
-      isRunning: false,
-      isListening: false,
     });
   },
 

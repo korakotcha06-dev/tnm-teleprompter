@@ -17,16 +17,6 @@ type Props = {
    */
   voiceEnabled?: boolean;
   /**
-   * Current mode of the run page. View = teleprompter renders + voice
-   * eligible. Edit = InlineScriptEditor mounted, voice paused. ControlBar
-   * swaps Start/Edit for Done in edit mode.
-   */
-  mode?: 'view' | 'edit';
-  /** Fired when the user clicks the Edit pencil. RunController flips mode. */
-  onEnterEdit?: () => void;
-  /** Fired when the user clicks Done. RunController flips mode + restores mirror. */
-  onExitEdit?: () => void;
-  /**
    * False if the script is empty (no content to read). Start button is
    * disabled in that case to avoid arming voice over nothing.
    */
@@ -35,9 +25,6 @@ type Props = {
 
 export function ControlBar({
   voiceEnabled = true,
-  mode = 'view',
-  onEnterEdit,
-  onExitEdit,
   canStartVoice = true,
 }: Props = {}) {
   const isRunning = useScriptStore((s) => s.isRunning);
@@ -64,7 +51,6 @@ export function ControlBar({
   const sidePadding = useSettingsStore((s) => s.sidePadding); // v0.5.1
   const setSidePadding = useSettingsStore((s) => s.setSidePadding);
 
-  const isEditing = mode === 'edit';
   const isManual = scrollMode === 'manual';
 
   // Switching mode while running would orphan an rAF loop (manual) or a
@@ -82,17 +68,7 @@ export function ControlBar({
         ← Library
       </Link>
 
-      {isEditing ? (
-        /* Edit mode: Done is the primary action. Replaces Start/Pause. */
-        <button
-          type="button"
-          onClick={onExitEdit}
-          title="Finish editing and return to teleprompter view (Esc)"
-          className="rb-btn primary"
-        >
-          ✓ Done
-        </button>
-      ) : !isRunning ? (
+      {!isRunning ? (
         <button
           type="button"
           onClick={start}
@@ -116,44 +92,30 @@ export function ControlBar({
         </button>
       )}
 
-      {/* Edit (pencil) — view-mode only. */}
-      {!isEditing ? (
+      {/* Scroll-mode toggle. Segmented control. */}
+      <div role="group" aria-label="Scroll mode" className="rb-seg">
         <button
           type="button"
-          onClick={onEnterEdit}
-          title="Edit script text inline"
-          className="rb-btn"
+          onClick={() => handleSetMode('voice')}
+          aria-pressed={!isManual}
+          title="Voice-driven highlight (Web Speech)"
+          className={`rb-btn ${!isManual ? 'active' : ''}`}
         >
-          ✎ Edit
+          🎙 Voice
         </button>
-      ) : null}
-
-      {/* Scroll-mode toggle. Hidden during edit. Segmented control. */}
-      {!isEditing ? (
-        <div role="group" aria-label="Scroll mode" className="rb-seg">
-          <button
-            type="button"
-            onClick={() => handleSetMode('voice')}
-            aria-pressed={!isManual}
-            title="Voice-driven highlight (Web Speech)"
-            className={`rb-btn ${!isManual ? 'active' : ''}`}
-          >
-            🎙 Voice
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSetMode('manual')}
-            aria-pressed={isManual}
-            title="Constant-speed auto-scroll (no microphone)"
-            className={`rb-btn ${isManual ? 'active' : ''}`}
-          >
-            ⇅ Manual
-          </button>
-        </div>
-      ) : null}
+        <button
+          type="button"
+          onClick={() => handleSetMode('manual')}
+          aria-pressed={isManual}
+          title="Constant-speed auto-scroll (no microphone)"
+          className={`rb-btn ${isManual ? 'active' : ''}`}
+        >
+          ⇅ Manual
+        </button>
+      </div>
 
       {/* Voice mode status indicator. Visible only while running + voice mode. */}
-      {!isEditing && isRunning && !isManual ? (
+      {isRunning && !isManual ? (
         <span role="status" className={`rb-status ${isListening ? 'live' : ''}`}>
           <span aria-hidden className="sdot" />
           {isListening ? 'Listening…' : voiceEnabled ? 'Mic idle' : 'Manual mode'}
@@ -163,7 +125,7 @@ export function ControlBar({
       {/* Manual mode speed control — slider + numeric WPM readout. Hidden in
           voice mode. Live updates: dragging while running adjusts pps on the
           next rAF tick (useManualScroll deps on wpm). */}
-      {!isEditing && isManual ? (
+      {isManual ? (
         <div className="rb-speed">
           <label htmlFor="manual-speed">Speed</label>
           <input
@@ -181,8 +143,8 @@ export function ControlBar({
       ) : null}
 
       {/* Manual +1 word — nudges the cursor when the matcher missed something.
-          Hidden in manual mode (no cursor to advance) and edit mode. */}
-      {!isEditing && !isManual ? (
+          Hidden in manual mode (no cursor to advance). */}
+      {!isManual ? (
         <button
           type="button"
           onClick={() => advanceCursor(1)}
@@ -193,11 +155,9 @@ export function ControlBar({
         </button>
       ) : null}
 
-      {!isEditing ? (
-        <button type="button" onClick={restart} className="rb-btn">
-          ↺ Restart
-        </button>
-      ) : null}
+      <button type="button" onClick={restart} className="rb-btn">
+        ↺ Restart
+      </button>
 
       <div className="rb-spacer" />
 
@@ -273,33 +233,31 @@ export function ControlBar({
         </button>
       </div>
 
-      {/* Mirror toggles hidden in edit mode — typing into a flipped textarea
-          would be unworkable. RunController auto-saves + restores BOTH the
-          user's H and V mirror preferences around the edit session. H and V
-          are independent so the user can match whatever beam-splitter rig
-          they're shooting on. */}
-      {!isEditing ? (
-        <div role="group" aria-label="Mirror" className="rb-seg">
-          <button
-            type="button"
-            onClick={toggleMirror}
-            aria-pressed={mirrorMode}
-            title="Mirror horizontally (left ↔ right)"
-            className={`rb-btn ${mirrorMode ? 'mirror-on' : ''}`}
-          >
-            ⇆ H
-          </button>
-          <button
-            type="button"
-            onClick={toggleMirrorV}
-            aria-pressed={mirrorV}
-            title="Mirror vertically (top ↔ bottom)"
-            className={`rb-btn ${mirrorV ? 'mirror-on' : ''}`}
-          >
-            ⇅ V
-          </button>
-        </div>
-      ) : null}
+      {/* Mirror toggles set a preference that only flips the RUNNING
+          teleprompter — the editable surface is always rendered unflipped, so
+          these are safe to leave visible while idle/typing. H and V are
+          independent so the user can match whatever beam-splitter rig they're
+          shooting on. */}
+      <div role="group" aria-label="Mirror" className="rb-seg">
+        <button
+          type="button"
+          onClick={toggleMirror}
+          aria-pressed={mirrorMode}
+          title="Mirror horizontally (left ↔ right)"
+          className={`rb-btn ${mirrorMode ? 'mirror-on' : ''}`}
+        >
+          ⇆ H
+        </button>
+        <button
+          type="button"
+          onClick={toggleMirrorV}
+          aria-pressed={mirrorV}
+          title="Mirror vertically (top ↔ bottom)"
+          className={`rb-btn ${mirrorV ? 'mirror-on' : ''}`}
+        >
+          ⇅ V
+        </button>
+      </div>
 
       <button
         type="button"

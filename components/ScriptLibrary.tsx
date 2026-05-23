@@ -38,7 +38,7 @@ export function ScriptLibrary() {
         {hydrated && sorted.length === 0 ? (
           <div className="lib-empty">
             <span className="em">No scripts yet</span>
-            Paste one on the right and hit Save.
+            Paste one on the right — it saves automatically.
           </div>
         ) : (
           <ul className="lib-list">

@@ -149,7 +149,7 @@ export function TeleprompterView({ scriptId }: Props) {
           {tokens.length === 0 ? (
             <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
               Start writing your script…{' '}
-              <span style={{ color: 'var(--text-ghost)' }}>(click ✎ Edit)</span>
+              <span style={{ color: 'var(--text-ghost)' }}>(pause to edit)</span>
             </p>
           ) : (
             tokens.map((t) => (
