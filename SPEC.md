@@ -137,7 +137,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://thetnm.com/teleprompter/setting
 | v0.5.0 | `55a6b4e` | Touchnewmedia brand reskin — warm-dark + amber + IBM Plex + Montserrat wordmark; SiteNav/Hero/Promo/Footer; `lib/brand.ts`; `app/icon.svg` favicon; Library/Editor/run-view reskin |
 | v0.5.1 | (in `84bbf2b`) | Side-padding control (⇿ stepper, 0–20%, default 6%) — fix text hugging edge |
 | v0.5.2 | `84bbf2b` | Run-view reading polish: single-color white text + faint amber highlight (no reflow), rAF-eased smooth voice autoscroll (EASE_FACTOR 0.07, dead-zone 24px), faint center leading line (voice+manual) on the read word, edit↔run wrap parity (maxWidth 1500 + sidePadding + pre-wrap + keep-all) |
-| v0.5.3 | `f9fef79` | Auto-save library editor (debounce 600ms) + edit-in-place on run page (Edit/Done removed) + scroll-anchor fix (typing no-jump) + Start→scroll regression fix + thetnm.com external link in nav |
+| v0.5.3 | `d3ca2c0` | Auto-save library editor (debounce 600ms) + edit-in-place on run page (Edit/Done removed) + scroll-anchor fix (typing no-jump) + Start→scroll regression fix + thetnm.com external link in nav |
 
 ---
 
