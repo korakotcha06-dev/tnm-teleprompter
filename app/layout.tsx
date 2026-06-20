@@ -55,7 +55,9 @@ const montserrat = Montserrat({
 });
 
 // Deployed at https://thetnm.com/teleprompter/ (Next basePath '/teleprompter').
-const SITE_URL = 'https://thetnm.com/teleprompter';
+// Trailing slash matches the served URL (trailingSlash: true) so canonical,
+// hreflang, OG url + sitemap loc + JSON-LD url all agree on ONE URL.
+const SITE_URL = 'https://thetnm.com/teleprompter/';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://thetnm.com'),

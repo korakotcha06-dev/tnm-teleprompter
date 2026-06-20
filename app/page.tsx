@@ -15,7 +15,8 @@ const JSON_LD = {
   '@type': 'SoftwareApplication',
   name: 'TNM Teleprompter',
   alternateName: 'โปรแกรม Teleprompter ภาษาไทย ฟรี',
-  url: 'https://thetnm.com/teleprompter',
+  // Trailing slash → matches the rendered canonical + sitemap loc.
+  url: 'https://thetnm.com/teleprompter/',
   applicationCategory: 'UtilitiesApplication',
   operatingSystem: 'Web Browser',
   inLanguage: ['th', 'en'],

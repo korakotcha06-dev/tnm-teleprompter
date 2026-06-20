@@ -1,7 +1,7 @@
 # Teleprompter — Technical Spec
 
 **Owner:** Touchnewmedia Co., Ltd. · **Lead:** BYTE (Web PM & Architect)
-**Status:** LIVE (production) · **Version:** v0.5.6
+**Status:** LIVE (production) · **Version:** v0.5.7
 **Live:** https://thetnm.com/teleprompter
 **Repo:** `/Users/korakotchangpan/Sites/teleprompter` (branch `main`)
 **Full docs:** Obsidian TNM Vault → `Teleprompter/` (Index, Client Guide, Developer Guide, Changelog, API & Component Reference, Testing Checklist)
@@ -148,7 +148,8 @@ curl -s -o /dev/null -w "%{http_code}\n" https://thetnm.com/teleprompter/setting
 | v0.5.3 | `d3ca2c0` | Auto-save library editor (debounce 600ms) + edit-in-place on run page (Edit/Done removed) + scroll-anchor fix (typing no-jump) + Start→scroll regression fix + thetnm.com external link in nav |
 | v0.5.4 | (local) | Editable numeric WPM input (manual speed) + language-aware reading stats (`lib/readingPace.ts` — Thai chars/min 400, EN wpm 140) |
 | v0.5.5 | (local) | Scroll-anywhere-resume (cueprompter: manual external-scroll resync + voice wheel→`setCursor` seek) · voice skip window 6→12 · current-word highlight made bold solid-amber + read-words dimmed · Import/Export scripts as `.json` (`lib/storage/shareScript.ts`, `putScript`) · SEO (Thai meta, OG, canonical+hreflang, JSON-LD, sitemap.ts, robots.ts) |
-| v0.5.6 | (local) | Edit-in-place on run page without a button + resume-in-place (shared `runScrollTop` + idempotent `setTokensFromContent`, `preventScroll` focus) · Google Search Console verify file in `public/` |
+| v0.5.6 | (local) | Edit-in-place on run page without a button + resume-in-place (shared `runScrollTop` + idempotent `setTokensFromContent`, `preventScroll` focus) · Google Search Console verify file in `public/` · JSON-LD reworked (`TNM Teleprompter`, `UtilitiesApplication`, `author` org) + Thai-first OG/keywords · bilingual README |
+| v0.5.7 | (local) | SEO URL consistency — sitemap `<loc>`, JSON-LD `url` + canonical/hreflang/OG (`SITE_URL`) all aligned to the trailing-slash served URL `https://thetnm.com/teleprompter/` (was mismatched: canonical had slash, sitemap loc didn't) |
 
 ---
 

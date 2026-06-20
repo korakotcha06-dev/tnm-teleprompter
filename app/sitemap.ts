@@ -11,7 +11,9 @@ export const dynamic = 'force-static';
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
-      url: 'https://thetnm.com/teleprompter',
+      // Trailing slash to match the rendered canonical (trailingSlash: true).
+      // A slash mismatch makes Google treat the sitemap loc ≠ the canonical.
+      url: 'https://thetnm.com/teleprompter/',
       changeFrequency: 'monthly',
       priority: 1,
     },
