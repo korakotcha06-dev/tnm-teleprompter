@@ -72,26 +72,46 @@ const SETTLE_PX = 0.5;
 //   drifts off the focal band (e.g. crossing to a new line).
 const DEAD_ZONE_PX = 24;
 
+// USER_SCROLL_GRACE_MS: after a wheel/touch scroll, treat the container as
+// user-driven for this long. While in this window the easing loop leaves
+// scrollTop alone (the reader is dragging to re-read); once it lapses we snap
+// the cursor to whatever word is now on the focal line and playback resumes
+// from there — the cueprompter "scroll anywhere, play continues there" feel.
+const USER_SCROLL_GRACE_MS = 200;
+
 type Options = {
   /**
    * Master gate. False = hook does nothing (e.g. in edit mode, or when
    * manual scroll engine owns scrollTop).
    */
   enabled: boolean;
+  /**
+   * Called when the user has manually scrolled and settled, with the token
+   * index nearest the focal line. The owner sets the cursor there so voice
+   * matching + highlighting continue from the re-read position.
+   */
+  onSeek?: (idx: number) => void;
 };
 
 export function useAutoScroll(
   activeIdx: number,
   containerRef: RefObject<HTMLElement | null>,
-  { enabled }: Options
+  { enabled, onSeek }: Options
 ): void {
   // Live target index, updated cheaply when the cursor advances — WITHOUT
   // restarting the rAF loop (that's the whole point of the rewrite).
   const targetIdxRef = useRef(activeIdx);
+  // Latest onSeek, read live so the loop never needs re-creating on identity
+  // changes of the callback.
+  const onSeekRef = useRef(onSeek);
 
   useEffect(() => {
     targetIdxRef.current = activeIdx;
   }, [activeIdx]);
+
+  useEffect(() => {
+    onSeekRef.current = onSeek;
+  }, [onSeek]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -104,7 +124,52 @@ export function useAutoScroll(
     // the container actually is rather than snapping.
     let current = el.scrollTop;
 
+    // User-scroll handling. While the reader drags/wheels we suspend easing;
+    // when they stop we resolve the focal word and hand it to onSeek once.
+    let userScrollUntil = 0;
+    let pendingSeek = false;
+    const markUserScroll = () => {
+      userScrollUntil = performance.now() + USER_SCROLL_GRACE_MS;
+      pendingSeek = true;
+    };
+    el.addEventListener('wheel', markUserScroll, { passive: true });
+    el.addEventListener('touchmove', markUserScroll, { passive: true });
+
+    // Find the word token whose vertical center is closest to the focal line.
+    const nearestWordIdx = (): number => {
+      const focal = el.scrollTop + el.clientHeight / 2;
+      const words = el.querySelectorAll('[data-word-idx]');
+      let best = -1;
+      let bestDist = Infinity;
+      words.forEach((w) => {
+        const e = w as HTMLElement;
+        const c = e.offsetTop + e.offsetHeight / 2;
+        const d = Math.abs(c - focal);
+        if (d < bestDist) {
+          bestDist = d;
+          best = Number(e.getAttribute('data-word-idx'));
+        }
+      });
+      return best;
+    };
+
     const tick = () => {
+      // Reader is actively scrolling → leave scrollTop alone, keep `current` in
+      // sync so we don't snap when easing resumes.
+      if (performance.now() < userScrollUntil) {
+        current = el.scrollTop;
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+      // Just settled after a user scroll → seek the cursor to the focal word
+      // once, then let normal easing take over centered on the new cursor.
+      if (pendingSeek) {
+        pendingSeek = false;
+        const seekIdx = nearestWordIdx();
+        if (seekIdx >= 0 && onSeekRef.current) onSeekRef.current(seekIdx);
+        current = el.scrollTop;
+      }
+
       const idx = targetIdxRef.current;
       if (idx >= 0) {
         const word = el.querySelector(
@@ -152,6 +217,8 @@ export function useAutoScroll(
     rafId = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(rafId);
+      el.removeEventListener('wheel', markUserScroll);
+      el.removeEventListener('touchmove', markUserScroll);
     };
     // Intentionally NOT keyed on activeIdx — the loop reads it live via the ref
     // so a word burst retargets without tearing down / restarting the glide.

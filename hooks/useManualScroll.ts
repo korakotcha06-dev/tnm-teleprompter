@@ -75,10 +75,22 @@ export function useManualScroll({ enabled, wpm, containerRef }: Options): void {
     // Initialize from current scrollTop so resuming after pause doesn't snap
     // back to the previous integer boundary.
     let acc = el.scrollTop;
+    // Last value WE wrote to scrollTop. If the live scrollTop differs from this
+    // by more than a pixel at the top of a tick, something external moved it —
+    // the user scrolled with the wheel/trackpad or dragged (cueprompter-style
+    // "scroll anywhere, play continues from there"). Adopt the new position
+    // instead of yanking back to our owned `acc`. Comparing against lastWritten
+    // (not `acc`) means our own sub-pixel per-frame writes never false-trigger.
+    let lastWritten = el.scrollTop;
 
     const tick = (now: number) => {
       const dt = (now - last) / 1000; // seconds
       last = now;
+
+      // Honor user-initiated scrolling: resume gliding from wherever they left.
+      if (Math.abs(el.scrollTop - lastWritten) > 1.5) {
+        acc = el.scrollTop;
+      }
 
       const totalHeight = el.scrollHeight - el.clientHeight;
 
@@ -99,6 +111,9 @@ export function useManualScroll({ enabled, wpm, containerRef }: Options): void {
         // Only commit to scrollTop when the integer part changes — avoids
         // the fractional-truncation deadlock.
         el.scrollTop = acc;
+        // Read back the value the browser actually stored (rounded), so the
+        // external-scroll detector above compares against a real baseline.
+        lastWritten = el.scrollTop;
 
         if (acc >= totalHeight) {
           // Reached the bottom — stop the loop. User can Restart to reset.

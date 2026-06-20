@@ -2,6 +2,7 @@
 
 import { memo } from 'react';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
+import { useSettingsStore } from '@/lib/stores/useSettingsStore';
 
 type Props = {
   index: number;
@@ -17,7 +18,11 @@ type Props = {
 function WordSpanInner({ index, text, isWhitespace }: Props) {
   const isHighlighted = useScriptStore((s) => s.highlightedIndices.has(index));
   const isSkipped = useScriptStore((s) => s.skippedIndices.has(index));
-  const isCurrent = useScriptStore((s) => s.cursor === index);
+  // Single-word highlight: the cursor word gets the amber slab. Gated to voice
+  // mode + running so manual scroll never paints an amber word.
+  const isOnCursor = useScriptStore((s) => s.isRunning && s.cursor === index);
+  const voiceMode = useSettingsStore((s) => s.scrollMode === 'voice');
+  const isCurrent = isOnCursor && voiceMode;
 
   // Whitespace tokens still carry `data-word-idx` so the token-index space
   // in the DOM is contiguous (0…N-1, no gaps) — required by the v0.1

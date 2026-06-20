@@ -1,7 +1,7 @@
 # Teleprompter — Technical Spec
 
 **Owner:** Touchnewmedia Co., Ltd. · **Lead:** BYTE (Web PM & Architect)
-**Status:** LIVE (production) · **Version:** v0.5.2
+**Status:** LIVE (production) · **Version:** v0.5.6
 **Live:** https://thetnm.com/teleprompter
 **Repo:** `/Users/korakotchangpan/Sites/teleprompter` (branch `main`)
 **Full docs:** Obsidian TNM Vault → `Teleprompter/` (Index, Client Guide, Developer Guide, Changelog, API & Component Reference, Testing Checklist)
@@ -44,32 +44,40 @@ A free, voice-detect teleprompter built by Touchnewmedia — a Chiang Mai produc
 ### Key architecture
 
 - **Static export + basePath:** `/run/[id]` was refactored to a static `/run?id=<uuid>` route (a dynamic segment can't be pre-generated for runtime localStorage UUIDs). `RunPage` reads `useSearchParams().get('id')` inside a `<Suspense>` boundary (required or the prod build fails with "Missing Suspense boundary with useSearchParams").
-- **Zustand stores:** `useScriptStore` (library CRUD + playback: tokens, cursor, highlighted/skipped index sets, isRunning, restartNonce, isListening) and `useSettingsStore` (font, line-height, theme, mirrorMode/mirrorV, scrollMode, manualSpeed, sidePadding — persisted with an additive `migrate()` that backfills fields added after v0.2, no schemaVersion bump).
+- **Zustand stores:** `useScriptStore` (library CRUD incl. `putScript` for import; playback: tokens, `tokensSource`, cursor, highlighted/skipped index sets, isRunning, `runScrollTop`, isListening; actions `setCursor`/`setRunScrollTop`) and `useSettingsStore` (font, line-height, theme, mirrorMode/mirrorV, scrollMode, manualSpeed, sidePadding — persisted with an additive `migrate()` that backfills fields added after v0.2, no schemaVersion bump).
 - **Voice loop:** `SpeechEngine` (auto-restart guarded by `userStopped`) → `useSpeechRecognition` → `useWordMatcher` (slices already-consumed words, runs the fuzzy matcher, calls `markSkipped` then `advanceCursor`) → `useVoiceMode` glue watches `isRunning`.
-- **Fuzzy matcher** (`lib/matcher/window-match.ts`): scans the next N word-like tokens, picks lowest Levenshtein distance, leftmost-on-tie. Conservative tune (v0.4): `WINDOW=6`, `MAX_DISTANCE=2`, length-scaled distance, nearest-priority, 2-word jump confirm to avoid spurious big jumps. Words ≤2 chars use exact-only. `lib/matcher/levenshtein.ts` is a two-row DP with length-gap + per-row early-exit at `max+1`.
+- **Fuzzy matcher** (`lib/matcher/window-match.ts`): scans the next N word-like tokens, nearest-qualifying wins (not lowest-distance), length-scaled distance, 2-word jump confirm to avoid spurious big jumps. `WINDOW=12` (v0.5.5 — widened from 6 so a reader who deliberately skips a chunk is still tracked; the confirmation gate guards against the mis-binds that motivated the old narrowing), `MAX_DISTANCE=2`. Words ≤3 chars use exact-only. `lib/matcher/levenshtein.ts` is a two-row DP with length-gap + per-row early-exit at `max+1`.
 - **Scroll engines (rAF):**
-  - `useAutoScroll` (voice) — a single long-lived `requestAnimationFrame` loop owns a `target` scrollTop and eases `current += (target - current) * EASE_FACTOR` (0.07) every frame. Retargeting only moves `target` (no animation restart → no bounce). `DEAD_ZONE_PX = 24`, `SETTLE_PX = 0.5`. Centers the word at `cursor` (the word being read).
-  - `useManualScroll` (manual) — constant velocity, length-independent reading-pace model: `px/s = (wpm / WORDS_PER_LINE) * (lineHeight*fontSize) * SPEED_MULTIPLIER / 60` (`WORDS_PER_LINE=8`, `SPEED_MULTIPLIER=1.6`). Fractional accumulator defeats integer-`scrollTop` truncation at slow speeds.
+  - `useAutoScroll` (voice) — a single long-lived `requestAnimationFrame` loop owns a `target` scrollTop and eases `current += (target - current) * EASE_FACTOR` (0.07) every frame. Retargeting only moves `target` (no animation restart → no bounce). `DEAD_ZONE_PX = 24`, `SETTLE_PX = 0.5`. Centers the word at `cursor`. **Scroll-anywhere-resume (v0.5.5):** wheel/touch suspends easing for `USER_SCROLL_GRACE_MS` (200ms); on settle it finds the word nearest the focal line and calls `onSeek` (→ `setCursor`) so voice playback continues from where the reader dragged to (cueprompter behavior).
+  - `useManualScroll` (manual) — constant velocity, length-independent reading-pace model: `px/s = (wpm / WORDS_PER_LINE) * (lineHeight*fontSize) * SPEED_MULTIPLIER / 60` (`WORDS_PER_LINE=8`, `SPEED_MULTIPLIER=1.6`). Fractional accumulator defeats integer-`scrollTop` truncation at slow speeds. **External-scroll resync (v0.5.5):** if `scrollTop` differs from the last value we wrote by >1.5px at tick start, the reader (or a button) moved it — adopt the new position instead of yanking back, so wheel/drag re-read works and resume continues from there.
   - Both rely on the inner scroller having inline `scrollBehavior: 'auto'` (globals.css sets `* { scroll-behavior: smooth }`, which would otherwise fight per-frame writes).
+- **Resume-in-place (v0.5.6):** the run page is directly editable whenever not running (no Edit button) — `RunController` shows `InlineScriptEditor` when `!isRunning`. Pausing swaps to the editor and back without jumping: both surfaces save/restore a shared `runScrollTop` (store) on mount/unmount, and `setTokensFromContent` is idempotent (no-ops when `content === tokensSource`) so a pure pause keeps the cursor + highlights and resumes in place; editing the text changes the content → re-tokenize + reset to top. Editor focus uses `preventScroll` so the restore wins.
 - **Mirror (two-layer wrapper):** H (`scaleX(-1)`) and V (`scaleY(-1)`) are independent. The transform lives on an **outer, non-scrolling** wrapper; the inner scroller owns `scrollTop` in normal (unflipped) coordinates, so scroll math is never inverted.
 
 ---
 
-## 4. Features (current — v0.5.2)
+## 4. Features (current — v0.5.6)
 
 **Editor + library**
 - Create / edit / delete scripts, run, all via UI. `crypto.randomUUID()` ids, ISO timestamps.
 - localStorage CRUD (`teleprompter.scripts`, `teleprompter.settings`, `teleprompter.schemaVersion="1"`).
-- Inline edit on the run page (cueprompter-style): toggle to a textarea, debounced auto-save (500ms), Esc/Done flush + re-tokenize.
+- Auto-save library editor (debounced) — no manual Save.
+- **Import / Export scripts as `.json` (v0.5.5):** share scripts between people, fully client-side (no server). Per-script Export + Export-all backup + Import. Self-describing wrapper (`teleprompter.script` / `teleprompter.library`); import validates + backfills settings from `DEFAULT_SETTINGS`; duplicate id → confirm overwrite/skip. `lib/storage/shareScript.ts`, store `putScript`.
+- **Language-aware reading stats (v0.5.4):** Thai counted by characters (`TH_CHARS_PER_MIN=400`), English by words (`EN_WORDS_PER_MIN=140`) — `lib/readingPace.ts`, used by editor stat line + library duration.
 
 **Run view**
-- Voice highlight + cursor-driven smooth autoscroll (rAF-eased).
-- Mic-permission self-heal (`useMicPermission`): reads live state via Permissions API + `onchange`; never trusts a stale cache; iOS/Safari falls back to direct `getUserMedia`. Friendly Thai voice-error banner mapping SpeechRecognition error codes → guidance + "Try again" / switch to Manual.
-- Fuzzy skip-ahead matcher (conservative tune above).
-- Manual WPM scroll mode (50–500, default 150).
-- Mirror H / V independent toggles.
-- Side-padding control (⇿ stepper, 0–20% per side, default 6%) — fixes text hugging the edge.
-- **Reading system (v0.5.2):** single-color white text (`#F5F1E8`) + faint amber highlight on the current word (`rgba(255,180,0,0.16)`, padding/negative-margin so no reflow). Faint amber center **leading line** (voice + manual). Edit↔run wrap parity: `maxWidth 1500` + `sidePadding` + `white-space:pre-wrap` + `word-break:keep-all` so the textarea and the prompter break lines identically.
+- **Edit-in-place + resume-in-place (v0.5.6):** the script is directly editable whenever NOT running (no Edit button — just type). Pausing drops to the editable surface AT THE SAME scroll position and resumes in place (shared `runScrollTop` + idempotent `setTokensFromContent`); editing the text restarts from the top. See §3 "Resume-in-place".
+- Voice highlight + cursor-driven smooth autoscroll (rAF-eased). **Single current word = solid amber slab + dark bold text + glow (v0.5.5);** already-read words dim to ~45%; gated to voice+running.
+- **Scroll-anywhere-resume (v0.5.5, cueprompter-style):** wheel/drag the script to re-read; manual resumes from there, voice re-seeks the cursor to the focal-line word.
+- Mic-permission self-heal (`useMicPermission`): live Permissions API + `onchange`; iOS/Safari direct `getUserMedia` fallback. Thai voice-error banner.
+- Fuzzy skip-ahead matcher — tracks deliberate word-skips up to `WINDOW=12` (v0.5.5).
+- Manual WPM scroll mode (50–500, default 150) — **editable numeric WPM input (v0.5.4)**.
+- Mirror H / V independent toggles. Side-padding control (⇿, 0–20%/side, default 6%).
+- Reading layout: white text (`#F5F1E8`), faint amber center **leading line** (voice + manual). Edit↔run wrap parity: `maxWidth 1500` + `sidePadding` + `white-space:pre-wrap` + `word-break:keep-all`.
+
+**SEO (v0.5.5)**
+- Thai-first metadata (title/description/keywords), Open Graph (`th_TH`) + Twitter card, canonical + hreflang (th-TH/en-US) → `https://thetnm.com/teleprompter`, JSON-LD `SoftwareApplication`. `app/sitemap.ts` + `app/robots.ts` (both `dynamic='force-static'` for static export). Google Search Console verification file in `public/googledc4df43b43d7cd1d.html`.
+- **Gotcha:** robots crawl rules are only honored at the DOMAIN ROOT — the `Sitemap:` line must be added to thetnm.com's root `robots.txt` (the `/teleprompter/robots.txt` Google ignores for rules, keeps as a sitemap pointer).
 
 **Brand chrome (v0.5.0 reskin)**
 - `SiteNav` (T. logo + TOUCHNEWMEDIA wordmark + status pill + Settings), `SiteHero` (headline + studio blurb + build/storage/library-count meta), `SitePromo` (4 service cards — E-learning production / Course design & scripting / Motion graphics & post / LMS-ready delivery + "Now booking" CTA), `SiteFooter`.
@@ -118,7 +126,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://thetnm.com/teleprompter/setting
 
 ## 7. Roadmap (remaining)
 
-- **v0.6 — Backward re-sync (deferred per Touch):** read-direction recovery when the speaker jumps backward (re-reads a line). Needs a **bidirectional** match window + a 2–3 word confirm before moving the cursor back, so a single misheard word never yanks the prompter backward. Pairs with the existing forward skip-ahead.
+- **Backward re-sync — partially solved (v0.5.5):** re-reading is now handled by **scroll-anywhere-resume** — the reader drags/wheels back to the line and voice playback re-seeks the cursor there (no bidirectional matcher needed). A pure speech-driven backward match (auto-detect a re-read without manual scroll) remains future work.
 - **v0.5+ backend:** PHP REST at same-origin `/teleprompter-api/` (no CORS — same host as the static app). localStorage→cloud bulk-import. Bearer token (server-side; a static export can't safely embed a build-time secret). MySQL `scripts` + `user_settings` tables.
 - **v1.0:** mobile responsive polish, Lighthouse > 90, Playwright E2E, cross-browser sign-off.
 
@@ -138,6 +146,9 @@ curl -s -o /dev/null -w "%{http_code}\n" https://thetnm.com/teleprompter/setting
 | v0.5.1 | (in `84bbf2b`) | Side-padding control (⇿ stepper, 0–20%, default 6%) — fix text hugging edge |
 | v0.5.2 | `84bbf2b` | Run-view reading polish: single-color white text + faint amber highlight (no reflow), rAF-eased smooth voice autoscroll (EASE_FACTOR 0.07, dead-zone 24px), faint center leading line (voice+manual) on the read word, edit↔run wrap parity (maxWidth 1500 + sidePadding + pre-wrap + keep-all) |
 | v0.5.3 | `d3ca2c0` | Auto-save library editor (debounce 600ms) + edit-in-place on run page (Edit/Done removed) + scroll-anchor fix (typing no-jump) + Start→scroll regression fix + thetnm.com external link in nav |
+| v0.5.4 | (local) | Editable numeric WPM input (manual speed) + language-aware reading stats (`lib/readingPace.ts` — Thai chars/min 400, EN wpm 140) |
+| v0.5.5 | (local) | Scroll-anywhere-resume (cueprompter: manual external-scroll resync + voice wheel→`setCursor` seek) · voice skip window 6→12 · current-word highlight made bold solid-amber + read-words dimmed · Import/Export scripts as `.json` (`lib/storage/shareScript.ts`, `putScript`) · SEO (Thai meta, OG, canonical+hreflang, JSON-LD, sitemap.ts, robots.ts) |
+| v0.5.6 | (local) | Edit-in-place on run page without a button + resume-in-place (shared `runScrollTop` + idempotent `setTokensFromContent`, `preventScroll` focus) · Google Search Console verify file in `public/` |
 
 ---
 

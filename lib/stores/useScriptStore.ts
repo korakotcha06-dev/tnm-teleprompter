@@ -30,6 +30,26 @@ type ScriptStoreState = {
   skippedIndices: Set<number>;
   isRunning: boolean;
   /**
+   * v0.6.1: true once Start has been pressed, and stays true across Pause —
+   * cleared only by restart(). RunController uses it to keep the teleprompter
+   * mounted while paused (so scroll position + cursor survive) instead of
+   * swapping back to the editor. Pause = freeze/resume; Restart = back to top.
+   */
+  /**
+   * v0.5.5: shared scroll position across the run⇄edit surface swap. Both
+   * TeleprompterView and InlineScriptEditor save their scrollTop here on
+   * unmount and restore it on mount, so pausing to edit (and resuming) keeps
+   * the exact reading position — no jump to the top. Reset to 0 only when the
+   * content changes or on restart.
+   */
+  runScrollTop: number;
+  /**
+   * v0.5.5: the content string the current `tokens` were built from. Lets
+   * setTokensFromContent skip re-tokenizing (and resetting the cursor) when the
+   * content is unchanged — the key to resuming playback in place after a pause.
+   */
+  tokensSource: string;
+  /**
    * v0.3: monotonically increments every time `restart()` runs. The
    * teleprompter view subscribes to it to reset its scroll container to the
    * top — necessary because in manual mode `cursor` stays 0 throughout, so
@@ -57,13 +77,27 @@ type ScriptStoreState = {
   ) => void;
   deleteScript: (id: string) => void;
   setActive: (id: string | null) => void;
+  /**
+   * Insert-or-replace a complete Script (used by import). If a script with the
+   * same id exists it's overwritten; otherwise appended. Persists immediately.
+   */
+  putScript: (script: Script) => void;
 
   // Playback actions
   setTokensFromContent: (content: string, language: Language) => void;
   start: () => void;
   pause: () => void;
   restart: () => void;
+  /** Persist the live run/edit scroll position so the surface swap is seamless. */
+  setRunScrollTop: (top: number) => void;
   advanceCursor: (n?: number) => void;
+  /**
+   * Jump the cursor to an absolute token index (voice mode "scroll-to-seek":
+   * the user drags/wheels the script and playback continues from there).
+   * Rebuilds highlightedIndices to everything before the new cursor and drops
+   * skipped marks at/after it, so re-read words return to the pending state.
+   */
+  setCursor: (index: number) => void;
   markHighlighted: (index: number) => void;
   /** v0.3: bulk-mark word indices as "skipped". Idempotent / additive. */
   markSkipped: (indices: number[]) => void;
@@ -94,6 +128,8 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
   highlightedIndices: new Set<number>(),
   skippedIndices: new Set<number>(),
   isRunning: false,
+  runScrollTop: 0,
+  tokensSource: '',
   restartNonce: 0,
   isListening: false,
 
@@ -140,37 +176,54 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
 
   setActive: (id) => set({ activeScriptId: id }),
 
+  putScript: (script) => {
+    persistScript(script);
+    set((s) => {
+      const idx = s.scripts.findIndex((x) => x.id === script.id);
+      if (idx >= 0) {
+        const next = [...s.scripts];
+        next[idx] = script;
+        return { scripts: next };
+      }
+      return { scripts: [...s.scripts, script] };
+    });
+  },
+
   setTokensFromContent: (content, language) => {
+    // v0.5.5 resume-in-place: TeleprompterView re-runs this on every mount,
+    // including when resuming after a pause/edit where the content DIDN'T
+    // change. Re-tokenizing identical content and resetting cursor to 0 would
+    // throw away the reading position — the "ไม่ต่อที่จุดเดิม" bug. So if the
+    // source content is unchanged, no-op (keep cursor / highlights / scroll).
+    if (content === get().tokensSource) return;
+
     const tokens = tokenize(content, language);
-    // v0.6 regression fix — DO NOT touch isRunning / isListening here.
-    //
-    // In the old view/edit world, TeleprompterView was always mounted and this
-    // effect only ran when the user manually exited the editor — resetting
-    // isRunning was a defensive "stop playback when content changes" guard.
-    //
-    // In v0.6, TeleprompterView mounts only AFTER the user presses Start
-    // (RunController swaps surfaces on `isRunning`). The tokenize-on-mount
-    // effect now fires immediately after Start → if we set isRunning: false
-    // here we instantly undo the very click that just mounted us, causing
-    // RunController to swap back to the editor. The user sees "Start does
-    // nothing" — Touch's bug.
-    //
-    // Resetting cursor/highlights on fresh content is still correct (a new
-    // token array has no meaningful cursor history). Playback flags are owned
-    // by ControlBar / restart() / pause() — we leave them alone.
+    // Content genuinely changed (edited / different script) → fresh token array
+    // with no meaningful cursor history. Reset position + scroll to the top.
+    // Playback flags (isRunning/isListening) are owned by ControlBar/restart/
+    // pause — we leave them alone (v0.6 regression guard).
     set({
       tokens,
+      tokensSource: content,
       cursor: 0,
+      runScrollTop: 0,
       highlightedIndices: new Set<number>(),
       skippedIndices: new Set<number>(),
     });
   },
 
+  // start() marks the session as "started" — a flag that PERSISTS across a
+  // pause so RunController keeps the teleprompter surface mounted (frozen at
+  // its current scroll/cursor) instead of swapping back to the editor. Only
+  // restart() clears it, returning to the editable top. This is what makes
+  // Pause a true freeze-and-resume rather than a jump back to the top.
   start: () => set({ isRunning: true }),
   pause: () => set({ isRunning: false, isListening: false }),
+  setRunScrollTop: (top) => set({ runScrollTop: top }),
   restart: () =>
     set((s) => ({
       cursor: 0,
+      runScrollTop: 0,
       highlightedIndices: new Set<number>(),
       skippedIndices: new Set<number>(),
       isRunning: false,
@@ -184,6 +237,18 @@ export const useScriptStore = create<ScriptStoreState>((set, get) => ({
       const newSet = new Set(s.highlightedIndices);
       for (let i = s.cursor; i < next; i++) newSet.add(i);
       return { cursor: next, highlightedIndices: newSet };
+    }),
+
+  setCursor: (index) =>
+    set((s) => {
+      const clamped = Math.max(0, Math.min(index, s.tokens.length));
+      const high = new Set<number>();
+      for (let i = 0; i < clamped; i++) high.add(i);
+      const skip = new Set<number>();
+      s.skippedIndices.forEach((i) => {
+        if (i < clamped) skip.add(i);
+      });
+      return { cursor: clamped, highlightedIndices: high, skippedIndices: skip };
     }),
 
   markHighlighted: (index) =>

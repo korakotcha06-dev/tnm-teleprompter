@@ -53,10 +53,15 @@ import { levenshtein } from './levenshtein';
 // ─── Tunable constants (adjust these between Touch's test passes) ───────────
 
 /**
- * Word-like lookahead distance. v0.3 used 10 → too wide, caused long-range
- * false binds. v0.3.1 = 6. If Touch still reports "มั่ว", drop to 5.
+ * Word-like lookahead distance. v0.3 used 10 (too wide → long-range false binds
+ * back when there was NO confirmation gate). v0.3.1 narrowed to 6. v0.5.5 widens
+ * to 12 so a reader who deliberately skips a chunk is still tracked: the
+ * confirmation gate (any jump > JUMP_CONFIRM_THRESHOLD needs a second
+ * consecutive word) now guards against the mis-binds that motivated the
+ * original narrowing, so a wider window is safe. If Touch reports "มั่ว", drop
+ * back toward 8.
  */
-export const WINDOW = 6;
+export const WINDOW = 12;
 
 /** Hard ceiling on edit distance (only reached by len >= 7 words). */
 export const MAX_DISTANCE = 2;

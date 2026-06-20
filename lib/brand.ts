@@ -18,5 +18,5 @@ export const BRAND = {
   /** Visible label for the company-site link in SiteNav. */
   siteLabel: 'thetnm.com',
   /** Brand build label shown in the nav pill + hero meta. Touch-approved. */
-  versionLabel: 'v0.5.3 · Auto-save',
+  versionLabel: 'v0.5.6 · 13 Jun 2026',
 } as const;

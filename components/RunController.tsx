@@ -22,7 +22,9 @@
 //   - Not running → InlineScriptEditor is mounted: the script body is directly
 //     editable and auto-saves (debounced) to localStorage. Just type.
 //   - Start → tokenizes the latest text + runs (voice highlight or WPM scroll).
-//   - Pause / Restart → drops back to the editable surface.
+//   - Pause → freezes the teleprompter in place; Start resumes from the same
+//     spot (the surface stays mounted, so scroll + cursor survive). v0.6.1.
+//   - Restart → resets to the top and drops back to the editable surface.
 //   - Mirror (H/V) only flips the RUNNING teleprompter; the editor is always
 //     rendered unflipped, so no snapshot/restore of mirror prefs is needed.
 
@@ -182,10 +184,11 @@ export function RunController({ scriptId }: Props) {
   // store's tokens array being populated yet.
   const hasContent = (script?.content?.trim().length ?? 0) > 0;
 
-  // Editing IS the idle state: whenever we're not running and the script
-  // exists, show the directly-editable surface. While running, show the
-  // tokenized teleprompter (highlight + auto-scroll). The two surfaces share
-  // the same column geometry so Start/Pause doesn't visually jump.
+  // Whenever NOT running, the script body is directly editable (no Edit button
+  // to press first — just type). Pausing drops to this editable surface; the
+  // shared runScrollTop + cursor-preserving tokenize keep the position so it
+  // doesn't jump to the top, and pressing Start resumes in place (or restarts
+  // from the top if the content was edited).
   const showEditor = !isRunning && !!script;
 
   return (

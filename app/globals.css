@@ -287,6 +287,17 @@ html {
 }
 .panel-body { padding: 16px; }
 
+/* Library header actions (Import / Export all) + import result notice */
+.lib-actions { display: flex; align-items: center; gap: 8px; }
+.lib-notice {
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
 /* Library list */
 .lib-empty {
   padding: 36px 16px;
@@ -580,26 +591,37 @@ html {
   word-break: keep-all;
   overflow-wrap: break-word;
 }
-.run-text .w { transition: background-color .2s ease; color: #F5F1E8; }
+.run-text .w { transition: background-color .12s ease, color .12s ease; color: #F5F1E8; }
+/* Already-read words dim down so the eye is pulled to the live position;
+   pending (not-yet-read) stays full white. */
+.run-text .w.read { color: rgba(245, 241, 232, 0.45); }
 .run-text .w.pending,
-.run-text .w.read,
 .run-text .w.skipped { color: #F5F1E8; }
+/* CURRENT word (voice mode) — solid amber slab + dark bold text so it's
+   unmistakable from across the room (v0.5.5; was a faint 16%-amber wash that
+   was hard to see). padding gives breathing room; the matching negative margin
+   cancels the box-width change so surrounding text never reflows/jumps as the
+   highlight moves word-to-word. */
 .run-text .w.cur {
-  background: rgba(255, 180, 0, 0.16);
-  color: #F5F1E8;
-  /* padding gives the highlight breathing room; the matching negative margin
-     cancels the box-width change so surrounding text never reflows/jumps as
-     the highlight moves word-to-word. */
+  background: var(--tnm-amber);
+  color: #1A1205;
+  font-weight: 700;
   padding: 0 6px;
   margin: 0 -6px;
-  border-radius: 4px;
+  border-radius: 5px;
+  box-shadow: 0 0 14px rgba(255, 180, 0, 0.45);
 }
 .run-stage.light .run-text,
 .run-stage.light .run-text .w,
 .run-stage.light .run-text .w.pending,
-.run-stage.light .run-text .w.read,
 .run-stage.light .run-text .w.skipped { color: #2A2722; }
-.run-stage.light .run-text .w.cur { background: rgba(255, 180, 0, 0.3); color: #2A2722; }
+.run-stage.light .run-text .w.read { color: rgba(42, 39, 34, 0.4); }
+.run-stage.light .run-text .w.cur {
+  background: var(--tnm-amber);
+  color: #1A1205;
+  font-weight: 700;
+  box-shadow: 0 0 14px rgba(255, 180, 0, 0.5);
+}
 
 .run-bar {
   position: relative;
@@ -656,6 +678,10 @@ html {
 .rb-speed label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; color: var(--text-dim); text-transform: uppercase; }
 .rb-speed input[type="range"] { width: 128px; accent-color: var(--tnm-amber); cursor: pointer; }
 .rb-speed .val { font-family: var(--font-mono); font-size: 12px; color: var(--text); min-width: 56px; text-align: center; }
+.rb-speed-num { width: 42px; font-family: var(--font-mono); font-size: 12px; color: var(--text); background: transparent; border: 1px solid var(--text-ghost, rgba(255,255,255,0.18)); border-radius: 4px; padding: 2px 4px; text-align: right; -moz-appearance: textfield; appearance: textfield; }
+.rb-speed-num::-webkit-outer-spin-button, .rb-speed-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.rb-speed-num:focus { outline: none; border-color: var(--tnm-amber); }
+.run-stage.light .rb-speed-num { color: #000; border-color: rgba(0,0,0,0.2); }
 
 .rb-stepper {
   display: inline-flex; align-items: center; gap: 4px;

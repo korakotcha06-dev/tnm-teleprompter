@@ -163,15 +163,29 @@ export function InlineScriptEditor({ script }: Props) {
     [script.id, updateScript]
   );
 
-  // Autofocus + caret at end on mount. Doing this once is enough — the
-  // editor is unmounted/remounted by RunController each time the user
-  // enters edit mode, so this effect runs fresh per session.
+  // Autofocus on mount WITHOUT scrolling (preventScroll) — the restored scroll
+  // position below must win. Only jump the caret to the end on a fresh edit
+  // (top of doc); when resuming mid-script we keep the restored position rather
+  // than yanking the caret (and view) to the end.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.focus();
-    const end = el.value.length;
-    el.setSelectionRange(end, end);
+    el.focus({ preventScroll: true });
+    if (useScriptStore.getState().runScrollTop < 4) {
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    }
+  }, []);
+
+  // Resume-in-place: restore the shared scroll position on mount (after the
+  // resize layout effect below has set the textarea height), and save it back
+  // on unmount so swapping to the running view keeps the exact position.
+  useLayoutEffect(() => {
+    const sc = scrollContainerRef.current;
+    if (sc) sc.scrollTop = useScriptStore.getState().runScrollTop;
+    return () => {
+      if (sc) useScriptStore.getState().setRunScrollTop(sc.scrollTop);
+    };
   }, []);
 
   // Flush pending debounce on unmount so the final keystroke isn't lost when

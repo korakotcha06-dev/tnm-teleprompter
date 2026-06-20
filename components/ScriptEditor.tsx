@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
+import {
+  countChars,
+  countWords,
+  estimateMinutes,
+  paceLabel,
+} from '@/lib/readingPace';
 import type { Language, Script } from '@/types';
 
 const SAVE_DEBOUNCE_MS = 600;
@@ -152,9 +158,12 @@ export function ScriptEditor({ active }: Props) {
     scheduleSave();
   };
 
-  const charCount = content.length;
-  const wordCount = content.split(/\s+/).filter(Boolean).length;
-  const estMin = Math.max(1, Math.ceil(wordCount / 130));
+  // Language-aware stats. Thai is counted/estimated by characters (no word
+  // spacing); English by words. See lib/readingPace.ts for the research basis.
+  const charCount = countChars(content);
+  const wordCount = countWords(content);
+  const estMin = estimateMinutes(content, language);
+  const isThai = language === 'th';
 
   return (
     <section className="panel" aria-label="Editor">
@@ -233,15 +242,28 @@ export function ScriptEditor({ active }: Props) {
             </select>
           </div>
           <div className="editor-foot stats" style={{ border: 'none', background: 'none', padding: 0 }}>
-            <span>
-              <span className="v">{charCount}</span> chars
-            </span>
-            <span>
-              <span className="v">{wordCount}</span> words
-            </span>
-            <span>
-              <span className="v">~{estMin}</span> min @ 130 wpm
-            </span>
+            {isThai ? (
+              <>
+                <span>
+                  <span className="v">{charCount}</span> ตัวอักษร
+                </span>
+                <span>
+                  <span className="v">~{estMin}</span> นาที @ {paceLabel(language)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  <span className="v">{charCount}</span> chars
+                </span>
+                <span>
+                  <span className="v">{wordCount}</span> words
+                </span>
+                <span>
+                  <span className="v">~{estMin}</span> min @ {paceLabel(language)}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>

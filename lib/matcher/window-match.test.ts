@@ -94,21 +94,22 @@ test('nearest preference: near dist-1 beats far dist-0', () => {
 
 // ─── window narrowing ──────────────────────────────────────────────────────
 
-test('WINDOW is narrowed to 6', () => {
-  assert.equal(WINDOW, 6);
+test('WINDOW is widened to 12', () => {
+  assert.equal(WINDOW, 12);
 });
 
 test('match beyond WINDOW is not found', () => {
-  // 8 filler words then the target — target sits at word 8, outside window 6.
-  const t = toks('a1 a2 a3 a4 a5 a6 a7 a8 elephant');
+  // 13 filler words then the target — target sits at word 13, outside window 12.
+  const t = toks('a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 elephant');
   const r = matchWord('elephant', t, 0);
   assert.equal(r.matchedIdx, -1);
 });
 
 test('match within WINDOW is found', () => {
-  const t = toks('a1 a2 a3 a4 a5 elephant');
+  // target at word 11 — inside the widened window of 12.
+  const t = toks('a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 elephant');
   const r = matchWord('elephant', t, 0);
-  assert.equal(r.matchedIdx, wordIdx(t, 5));
+  assert.equal(r.matchedIdx, wordIdx(t, 11));
 });
 
 // ─── confirmation gating on big jumps ──────────────────────────────────────

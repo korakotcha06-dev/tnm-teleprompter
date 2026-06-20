@@ -8,6 +8,27 @@ import { SiteHero } from '@/components/SiteHero';
 import { SitePromo } from '@/components/SitePromo';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
 
+// Structured data (SoftwareApplication) — helps Google show this as a free web
+// app in TH/EN results. Rendered into the static-exported HTML.
+const JSON_LD = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'TNM Teleprompter',
+  alternateName: 'โปรแกรม Teleprompter ภาษาไทย ฟรี',
+  url: 'https://thetnm.com/teleprompter',
+  applicationCategory: 'UtilitiesApplication',
+  operatingSystem: 'Web Browser',
+  inLanguage: ['th', 'en'],
+  description:
+    'เทเลพรอมเตอร์ (บอกบท) ออนไลน์ฟรี ภาษาไทยเป็นหลัก รองรับอังกฤษ — ตรวจจับเสียงพูดแล้วไฮไลต์คำและเลื่อนบทตามอัตโนมัติ ไม่ต้องสมัครสมาชิก ไม่ต้องติดตั้ง ใช้งานในเบราว์เซอร์ บทเก็บในเครื่องผู้ใช้.',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'THB' },
+  author: {
+    '@type': 'Organization',
+    name: 'Touchnewmedia Co., Ltd.',
+    url: 'https://thetnm.com',
+  },
+};
+
 export default function Home() {
   const scripts = useScriptStore((s) => s.scripts);
   const activeScriptId = useScriptStore((s) => s.activeScriptId);
@@ -22,6 +43,10 @@ export default function Home() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+      />
       <SiteNav />
       {/* Hydration guard: pass null until the store hydrates so the static
           HTML and first client render agree (placeholder "—"), then the real

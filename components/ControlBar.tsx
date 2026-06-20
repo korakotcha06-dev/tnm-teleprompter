@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
 import {
@@ -52,6 +53,23 @@ export function ControlBar({
   const setSidePadding = useSettingsStore((s) => s.setSidePadding);
 
   const isManual = scrollMode === 'manual';
+
+  // Editable WPM field: hold a string draft while the user types so an empty
+  // box or a half-typed number isn't fought by the store's clamp/round on every
+  // keystroke. Keep it in sync when manualSpeed changes from elsewhere (the
+  // slider, or a persisted-settings rehydrate). commitSpeed clamps + writes.
+  const [speedDraft, setSpeedDraft] = useState(String(manualSpeed));
+  useEffect(() => {
+    setSpeedDraft(String(manualSpeed));
+  }, [manualSpeed]);
+  const commitSpeed = () => {
+    const n = Number(speedDraft);
+    if (speedDraft.trim() === '' || Number.isNaN(n)) {
+      setSpeedDraft(String(manualSpeed)); // revert junk/empty to last good value
+      return;
+    }
+    setManualSpeed(n); // store clamps to MIN..MAX + rounds; effect syncs draft
+  };
 
   // Switching mode while running would orphan an rAF loop (manual) or a
   // SpeechEngine session (voice). Pause first so the relevant useEffect
@@ -138,7 +156,29 @@ export function ControlBar({
             onChange={(e) => setManualSpeed(Number(e.target.value))}
             aria-label="Scroll speed in words per minute"
           />
-          <span className="val tabular-nums">{manualSpeed} wpm</span>
+          {/* Editable WPM readout — type a number directly. We keep a local
+              draft so partial/empty typing isn't clobbered by the store clamp
+              mid-keystroke; commit (clamp + write) on blur or Enter. The store
+              already clamps to MANUAL_SPEED_MIN..MAX and rounds. */}
+          <span className="val tabular-nums">
+            <input
+              type="number"
+              min={MANUAL_SPEED_MIN}
+              max={MANUAL_SPEED_MAX}
+              value={speedDraft}
+              onChange={(e) => setSpeedDraft(e.target.value)}
+              onBlur={commitSpeed}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  commitSpeed();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              aria-label="Scroll speed in words per minute"
+              className="rb-speed-num"
+            />{' '}
+            wpm
+          </span>
         </div>
       ) : null}
 

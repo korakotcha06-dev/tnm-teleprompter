@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useScriptStore } from '@/lib/stores/useScriptStore';
 import { useSettingsStore } from '@/lib/stores/useSettingsStore';
 import { useAutoScroll } from '@/hooks/useAutoScroll';
@@ -18,9 +18,9 @@ export function TeleprompterView({ scriptId }: Props) {
     s.scripts.find((x) => x.id === scriptId)
   );
   const tokens = useScriptStore((s) => s.tokens);
-  const restartNonce = useScriptStore((s) => s.restartNonce);
   const isRunning = useScriptStore((s) => s.isRunning);
   const cursor = useScriptStore((s) => s.cursor);
+  const setCursor = useScriptStore((s) => s.setCursor);
   const setTokensFromContent = useScriptStore((s) => s.setTokensFromContent);
 
   const fontSize = useSettingsStore((s) => s.fontSize);
@@ -51,6 +51,9 @@ export function TeleprompterView({ scriptId }: Props) {
   const voiceAutoScrollEnabled = scrollMode === 'voice' && isRunning;
   useAutoScroll(cursor, wrapperRef, {
     enabled: voiceAutoScrollEnabled,
+    // cueprompter-style: drag/wheel the script to re-read, and voice playback
+    // continues from the word you land on.
+    onSeek: setCursor,
   });
 
   // Manual mode auto-scroll: constant velocity, WPM-driven.
@@ -61,15 +64,19 @@ export function TeleprompterView({ scriptId }: Props) {
     containerRef: wrapperRef,
   });
 
-  // Reset scrollTop to 0 on every Restart. We key on `restartNonce` (bumped
-  // by the store's restart action) rather than `cursor === 0` because in
-  // manual mode the cursor never leaves 0 — a cursor-based effect would only
-  // fire once on mount and miss subsequent restarts.
-  useEffect(() => {
-    if (wrapperRef.current) {
-      wrapperRef.current.scrollTop = 0;
-    }
-  }, [restartNonce]);
+  // Resume-in-place: restore the shared scroll position on mount and save it
+  // back on unmount. Pausing swaps to the editor and back; carrying scrollTop
+  // through the store keeps the reading position (no jump to top). On Restart
+  // the store sets runScrollTop=0, so a fresh mount lands at the top. Runs as a
+  // layout effect (before paint) so it's set before the scroll hooks' effects
+  // seed their position from scrollTop.
+  useLayoutEffect(() => {
+    const el = wrapperRef.current;
+    if (el) el.scrollTop = useScriptStore.getState().runScrollTop;
+    return () => {
+      if (el) useScriptStore.getState().setRunScrollTop(el.scrollTop);
+    };
+  }, []);
 
   if (!hydrated) {
     return (
@@ -149,7 +156,7 @@ export function TeleprompterView({ scriptId }: Props) {
           {tokens.length === 0 ? (
             <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
               Start writing your script…{' '}
-              <span style={{ color: 'var(--text-ghost)' }}>(pause to edit)</span>
+              <span style={{ color: 'var(--text-ghost)' }}>(restart to edit)</span>
             </p>
           ) : (
             tokens.map((t) => (
